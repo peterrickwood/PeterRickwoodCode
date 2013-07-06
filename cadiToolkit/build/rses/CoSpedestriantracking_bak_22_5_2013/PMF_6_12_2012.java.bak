@@ -1,0 +1,1028 @@
+package rses.CoSpedestriantracking;
+
+import java.awt.Color;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+
+import rses.spatial.GISLayer;
+import rses.util.Util;
+import rses.Debug;
+
+
+
+/**
+ *  Probability mass function over space
+ *  
+ *  
+ * @author peterr
+ *
+ */
+public class PMF 
+{
+	private rses.spatial.GISLayer geography;
+	
+	//data is indexed by lat/lon indices
+	double[][] data;
+	int latpos = -1;
+	int lonpos = -1;
+	
+	public PMF(PMF tobecopied)
+	{
+		this.data = rses.util.Util.copy(tobecopied.data);
+		this.geography = tobecopied.geography;
+	}
+	
+	public PMF(rses.spatial.GISLayer regionOfInterest)
+	{
+		this(regionOfInterest, false);
+	}
+
+	public PMF(rses.spatial.GISLayer regionOfInterest, int latpos, int lonpos)
+	{
+		this.geography = regionOfInterest;
+		this.latpos = latpos;
+		this.lonpos = lonpos;
+	}
+	
+	public PMF(rses.spatial.GISLayer regionOfInterest, boolean initializeToUniform)
+	{
+		this.geography = regionOfInterest;
+		data = new double[regionOfInterest.getLatSteps()][regionOfInterest.getLongSteps()];
+		if(initializeToUniform) 
+		{
+			for(int i = 0; i < data.length; i++)
+				for(int j = 0; j < data[0].length; j++)
+					data[i][j] = 1.0/(data.length*data[0].length);
+		}
+	}
+	
+	public GISLayer getGeography()
+	{
+		return this.geography;
+	}
+	
+	/*
+	 * get square size in metres
+	 */
+	public double getSquareSize()
+	{
+		double lat1 = 0.5*(this.geography.getMinLat()+this.geography.getMaxLat());
+		double lonmetres = rses.math.MathUtil.getDistanceBetweenPointsOnEarth(lat1, this.geography.getMinLong(), 
+				lat1, this.geography.getMaxLong());
+		double lonm = lonmetres/this.geography.getLongSteps();
+
+		double lon1 = 0.5*(this.geography.getMinLat()+this.geography.getMaxLat());
+		double latmetres = rses.math.MathUtil.getDistanceBetweenPointsOnEarth(this.geography.getMinLat(), 
+				lon1, this.geography.getMaxLat(), lon1);
+		double latm = latmetres/this.geography.getLatSteps();
+		
+		if(Math.abs(latm-lonm) > 0.1) //if there is more than 10cm difference, chuck a wobbly
+			throw new RuntimeException();
+		
+		return (latm+lonm)/2.0;
+	}
+	
+	public int[] getDimensions()
+	{
+		return new int[] {this.geography.getLatSteps(), this.geography.getLongSteps()};
+	}
+	
+	public void setValue(double lat, double lon, double val)
+	{
+		int[] latloni = geography.getLatLongIndices(lat, lon);
+		if(data != null)
+			data[latloni[0]][latloni[1]] = val;
+		else throw new RuntimeException("You are trying to set the value of an ML (read-only) PMF");
+	}
+	
+	
+	double[][] logprobcache;
+	public void cacheLogProbs()
+	{
+		this.logprobcache = new double[data.length][data[0].length];
+		for(int i = 0; i < data.length; i++)
+			for(int j = 0; j < data[0].length; j++) 
+				logprobcache[i][j] = Math.log(data[i][j]);	
+	}
+	
+	
+	public double getLogProb(double lat, double lon)
+	{
+		int[] latloni = geography.getLatLongIndices(lat, lon);
+		if(logprobcache != null)
+			return logprobcache[latloni[0]][latloni[1]];
+		else
+			return Math.log(getProb(lat, lon));
+	}
+	
+	public double getLogProbByIndices(int latpos, int lonpos)
+	{
+		if(logprobcache != null)
+			return logprobcache[latpos][lonpos];
+		else
+			return Math.log(getProbByIndices(latpos, lonpos));
+	}
+	
+	
+	public double getProb(double lat, double lon)
+	{
+		int[] latloni = geography.getLatLongIndices(lat, lon);
+		if(data != null)
+			return data[latloni[0]][latloni[1]];
+		else
+			return (latloni[0] == latpos && latloni[1] == lonpos) ? 1 : 0;
+	}
+	
+	public double getProbByIndices(int latpos, int lonpos)
+	{
+		if(data != null)
+			return data[latpos][lonpos];
+		else
+			return (latpos == this.latpos && lonpos == this.lonpos) ? 1 : 0;
+	}
+
+	
+	
+	public void multiplyBy(double fact)
+	{
+		if(this.data == null)
+			throw new RuntimeException("trying to do operation on ML pmf. These are read-only and you probably shouldnt ever be doing this");
+
+		for(int x = 0; x < data.length; x++)
+		{
+			for(int y = 0; y < data[x].length; y++)
+				data[x][y] *= fact;
+		}
+
+	}
+	
+	public void multiply(PMF pmf2, boolean normalizeafter)
+	{
+		if(this.data == null)
+			throw new RuntimeException("trying to do operation on ML pmf. These are read-only and you probably shouldnt ever be doing this");
+		
+		if(pmf2.data.length != data.length || pmf2.data[0].length != data[0].length) throw new RuntimeException("Trying to multiply mismatched pmf's");
+		for(int x = 0; x < data.length; x++)
+		{
+			for(int y = 0; y < data[x].length; y++)
+				data[x][y] *= pmf2.data[x][y];
+		}
+		
+		if(normalizeafter)
+			normalize();
+		
+	}
+
+
+	
+	public boolean isZeroEverywhere()
+	{
+		if(data == null)
+			return false; //ML pmf's are by definition 1 in one (and only one) grid cell
+		
+		for(int a =0; a < data.length; a++)
+			for(int b=0; b < data[0].length; b++)
+				if(data[a][b] > 0) return false;
+		return true;
+	}
+	
+	public boolean isUniform()
+	{
+		if(data == null)
+			return false; //ML pmf's are by definition 1 in one (and only one) grid cell
+
+		double val = data[0][0];
+		for(int a =0; a < data.length; a++)
+			for(int b=0; b < data[0].length; b++)
+				if(data[a][b] != val) return false;
+		return true;		
+	}
+	
+	
+	
+	public PMF project1fwd(int lat, int lon, PMF prior, double[] speedprobs, double[] orientprobs)
+	{
+		return this.project1(true, lat, lon, prior, speedprobs, orientprobs);
+	}
+
+	public PMF project1bwd(int lat, int lon, PMF prior, double[] speedprobs, double[] orientprobs)
+	{
+		return this.project1(false, lat, lon, prior, speedprobs, orientprobs);		
+	}
+	
+	
+	private PMF project1(boolean fwd, int lat, int lon, PMF prior, double[] speedprobs, double[] orientprobs)
+	{
+		throw new RuntimeException("Not implemented, and maybe you dont need to. not sure if this is good idea");
+	}
+
+	
+	
+	
+	public PMF[] project_new(int maxtimesteps, PMF spatialPrior, double[][][][] pathdists, 
+			double[] speedprobs) 
+	throws java.io.IOException
+	{
+		PMF[] result = new PMF[maxtimesteps];
+		result[0] = this;
+		
+		//now, for *each* potential starting point, we spread out
+		for(int startlat = 0; startlat < geography.getLatSteps(); startlat++)
+			for(int startlon = 0; startlon < geography.getLongSteps(); startlon++)
+				if(spatialPrior.getProbByIndices(startlat, startlon) > 0) 
+				{
+					for(int i = 1; i < maxtimesteps; i++)
+					{						
+						//ok, for 'i' timesteps away from the initial distribution,
+						//we need to calculate the 'weight' for each radius
+						PMF next = this.getRadiusProb_new(startlat, startlon, i, speedprobs, spatialPrior, pathdists);
+						if(result[i] == null) result[i] = next;
+						else result[i].add(next);
+					}
+				}
+				else if(this.getProbByIndices(startlat, startlon) > 0)
+					throw new RuntimeException("PMF that we are projecting has non-zero element somewhere where the prior is zero! This should be impossible");
+
+		
+		
+		for(int i=1; i < maxtimesteps; i++)
+		{
+			if(result[i] == null) //whack in uniform distribution 
+			{
+				rses.Debug.println("Reverting to uniform distribution at offset "+i, rses.Debug.INFO);
+				result[i] = new PMF(this.geography, true);
+			}
+			else if(result[i].isZeroEverywhere())
+				throw new RuntimeException("Zero-everywhere PMF at i="+i);
+			else
+				result[i].normalize();
+		}
+		
+		return result;
+	}
+
+	
+	/** Like the standard getRadiusProb, but here we are given a probability distribution
+	 * over speeds, and we weight things by that.
+	 * 
+	 * The timesteps parameter tells us how many timesteps we are projecting the initial lat/lon
+	 * 
+	 * 
+	 * @param startlati
+	 * @param startloni
+	 * @param r
+	 * @param spatialPrior
+	 * @param pathdists
+	 * @param speedprobs. speedprobs[0] gives chance of being stationary, speedprobs[1] chance of 0.1 m/s, speedprobs[2] chance of 0.2 m/s, etc
+	 * @return
+	 */
+	public PMF getRadiusProb_new(int startlati, int startloni, int timesteps, 
+			double[] speedprobs, PMF spatialPrior, double[][][][] pathdists)
+	{
+		//System.out.println("At start "+startlati+","+startloni+" radius "+r);
+		if(spatialPrior.getProbByIndices(startlati, startloni) == 0.0)
+			throw new RuntimeException("geting radius prob from start square that has zero prior?!");
+		if(timesteps == 0) throw new IllegalArgumentException("timesteps must be positive. 0 should be handled alreday by a special case");	
+		
+		double root2 = Math.sqrt(2.0);
+		
+		double maxdist = timesteps*(speedprobs.length-1)/10.0;
+		int r = (int) (maxdist/getSquareSize());
+		PMF next = new PMF(this.geography);
+		for(int i = Math.max(0, startlati-r); i <= startlati+r && i < data.length; i++)
+		{				
+			for(int j = Math.max(0, startloni-r); j <= startloni+r && j < data[0].length; j++)
+			{
+				double priorprob = spatialPrior.getProbByIndices(i, j);
+				if(priorprob <= 0) { //need this check because pathdists may be null for unreachable squares
+					next.data[i][j] = 0.0;
+					continue;
+				}
+
+				double dist = pathdists[startlati][startloni][i][j];
+				
+				if(dist <= maxdist) 
+				{					
+					if(priorprob > 0)
+					{
+						int speedi = (int) (dist*10.0/timesteps); //speed index
+						next.data[i][j] = speedprobs[speedi];
+					}
+					else
+						next.data[i][j] = 0.0;
+				}
+			}
+		}
+		
+		//IMPORTANT TO NORMALIZE BEFORE WE MULTIPLY BY START PROBS, BECAUSE OTHERWISE WE OBLITERATE 
+		//THE ACTUAL START PROBABILITIES 
+		next.normalize();
+		next.multiplyBy(data[startlati][startloni]);
+
+		
+		return next;
+	}
+
+	
+	
+	
+	
+	
+	
+	
+	/** Project the pmf forward for up to maxtimesteps (or until it becomes uniform)
+	 * 
+	 * @param maxtimesteps The number of steps to take *at the slowest speed* before assuming its relaxed to uniform
+	 * 
+	 * 
+	 * @param spatialPrior (the spatial prior for the PMF) We need to know this because,
+	 *                     even though the spatial prior should already be embedded in this
+	 *                     PMF (i.e. this PMF should have been multiplied by the prior),
+	 *                     we need to make sure that where the prior is zero, we always
+	 *                     keep it at zero.
+	 * @return
+	 */
+	public PMF[] project(int maxtimesteps, PMF spatialPrior, double[][][][] pathdists, double[] speeds) 
+	throws java.io.IOException
+	{
+		PMF[] result = new PMF[maxtimesteps];
+		result[0] = this;
+		
+		//now, at each speed, for *each* potential starting point, we spread out
+		for(int s = 0; s < speeds.length; s++)
+		{			
+			double speed = speeds[s];
+			
+			for(int startlat = 0; startlat < geography.getLatSteps(); startlat++)
+				for(int startlon = 0; startlon < geography.getLongSteps(); startlon++)
+					if(spatialPrior.getProbByIndices(startlat, startlon) > 0) 
+					{
+						for(int i = 1; i < maxtimesteps; i++)
+						{
+							PMF next;
+							int r = (int) (i*speed/getSquareSize());
+							if(r >= maxtimesteps)
+								break; //assume we've got to uniform
+
+								
+							if(r == 0) {
+								next = new PMF(this.geography);
+								next.data[startlat][startlon] = data[startlat][startlon];
+							}
+							else
+								next = this.getRadiusProb(startlat, startlon,r, spatialPrior, pathdists);
+
+							//else next = getRadiusProb_old(startlat, startlon, i, spatialPrior);
+
+							if(result[i] == null) result[i] = next;
+							else result[i].add(next);
+						}
+					}
+					else if(this.getProbByIndices(startlat, startlon) > 0)
+						throw new RuntimeException("PMF that we are projecting has non-zero element somewhere where the prior is zero! This should be impossible");
+		}	
+
+		
+		
+		for(int i=1; i < maxtimesteps; i++)
+		{
+			if(result[i] == null) //whack in uniform distribution 
+			{
+				rses.Debug.println("Reverting to uniform distribution at offset "+i, rses.Debug.INFO);
+				result[i] = new PMF(this.geography, true);
+			}
+			else if(result[i].isZeroEverywhere())
+				throw new RuntimeException("Zero-everywhere PMF at i="+i);
+			else
+				result[i].normalize();
+		}
+		
+		return result;
+	}
+
+	
+	
+	
+	/* From prev to next (separated by timediff timesteps), infer speed and orientation probabilities for each x,y
+	 * 
+	 */
+	public static double[][] getSpeedsAndOrientations(int lati, int loni, PMF prev, PMF next, int timediff, double[] speeds, double[][][][] pathdists)
+	{
+		//orientations and their probs
+		//We calculate orientations in 30 degree chunks
+		double[] orientationprobs = new double[6];
+
+		//speed probs
+		double[] speedtots = new double[speeds.length];
+
+		int[] rforspeeds = new int[speeds.length];
+		for(int s = 0; s < speeds.length; s++)
+			rforspeeds[s] = (int) (timediff*speeds[s]/prev.getSquareSize()); 
+		
+		//look at all the nearby squares
+		for(int s = 0; s < speeds.length; s++)
+		{
+			double speed = speeds[s];
+			int r = rforspeeds[s];
+			double rsq = Math.pow(timediff*speed/prev.getSquareSize(), 2);
+
+
+			//look at all the nearby squares
+			for(int i = Math.max(0, lati-r); i <= lati+r && i < prev.data.length; i++)
+				for(int j = Math.max(0, loni-r); j <= loni+r && j < prev.data[0].length; j++)
+				{
+					double dist = pathdists[lati][loni][i][j];
+					if(dist*dist > rsq)
+						continue;
+					double p = next.getProbByIndices(i, j);
+					speedtots[s] += p;
+
+					double angle = getAngle(lati, loni, i, j);
+					orientationprobs[(int) (angle/(Math.PI/6.0))] += p; 
+				}					
+		}
+
+		//ok, we now normalize, so that we have an estimate of the speed and orientation at this square
+
+		//speeds is a bit special, because larger speeds INCLUDE the smaller ones. 
+		//So 3 m/s means 0-3 m/s, 6 m/s means 0-6 m/s, and so on.
+		//Lets correct for this later. For now we just stay with that system
+		//Also, the larger speeds cover a wider area, so of course they will have a higher 
+		//probability. We correct for that here
+		for(int s = 0; s < speedtots.length; s++)
+			speedtots[s] /= (rforspeeds[s]*rforspeeds[s]); 
+		Util.normalize(speedtots); 
+		
+		Util.normalize(orientationprobs); //orientations (in 30 degree chunks)
+		
+		return new double[][] {speedtots, orientationprobs};
+	}
+	
+	
+	
+	private static double getAngle(int lat1, int lon1, int lat2, int lon2)
+	{
+        double latDiff = lat1 - lat2;
+        double lonDiff = lon1 - lon2;
+        return Math.atan2(lonDiff, latDiff);
+	}
+	
+	
+	
+	//does the path from startx,starty go along a valid path
+	//
+	//NOTE -- we do NOT check the start point of the path, just a few steps along the way
+	private boolean isValidPath(double startx, double starty, double endx, double endy)
+	{
+		final int NSTEPS = 3;
+		double xdelta = (endx-startx)/NSTEPS;
+		double ydelta = (endy-starty)/NSTEPS;
+		for(int i = 1; i <= NSTEPS; i++)
+		{
+			int x = (int) (startx+i*xdelta);
+			int y = (int) (starty+i*ydelta);
+			
+			if(x < 0 || x >= data.length || y < 0 || y >= data[0].length)
+				continue; //if the position is out of bounds we assume its OK.
+			else if(getProbByIndices(x,y) == 0)
+				return false;
+		}
+		return true;
+	}
+	
+	
+	
+	
+	public PMF[] getProjectionPMFs(Distribution initialSpeed, Distribution initialAngle, 
+			Distribution speedDelta, Distribution orientDelta, int maxsteps, int numwalkers)
+	{
+		PMF[] result = new PMF[maxsteps+1];
+		result[0] = this;
+		for(int n = 1; n <= maxsteps; n++)
+			result[n] = new PMF(this.geography);
+		
+		for(int i = 0; i < data.length; i++)
+			for(int j = 0; j < data[0].length; j++)
+			{
+				if(this.getProbByIndices(i, j) > 0) {
+					PMF[] proj = getProjectionPMFs(i, j, initialSpeed, initialAngle, speedDelta, orientDelta, maxsteps, numwalkers);
+					for(int n = 1; n <= maxsteps; n++)
+						result[n].add(proj[n]);
+				}
+			}
+		
+		return result;
+	}
+	
+	
+	/** Starting at startlati/startloni, with speed drawn from initialSpeed and angle drawn from initial
+	 * angle, go on a walk, and work out the probability of being at each square after 't' timesteps.
+	 * 
+	 * @param initialSpeed
+	 * @param initialAngle
+	 * @param speedDelta
+	 * @param orientDelta
+	 * @param maxsteps
+	 * @return
+	 */
+	public PMF[] getProjectionPMFs(int startlati, int startloni, Distribution initialSpeed, Distribution initialAngle, 
+			Distribution speedDelta, Distribution orientDelta, int maxsteps, int numwalkers)
+	{
+		int latsize = this.getDimensions()[0];
+		int lonsize = this.getDimensions()[1];
+		PMF[] result = new PMF[maxsteps+1];
+		result[0] = null;
+		for(int i = 1; i <= maxsteps; i++)
+			result[i] = new PMF(this.geography);
+		
+		//run a few trial walkers to work out how to scale the results
+		double[] logprobs = new double[11];
+		for(int i = 0; i < 11; i++)
+		{
+			//Debug.println("Doing test walker", Debug.INFO);
+			double[][] testresult = getPositionsOverTime(startlati, startloni, initialSpeed, initialAngle, speedDelta, orientDelta, maxsteps, true, Double.NaN);
+			double logprob = testresult[maxsteps][2];
+			logprobs[i] = logprob;
+		}
+		java.util.Arrays.sort(logprobs);
+		double medianlogprob = logprobs[logprobs.length/2];
+		Debug.println("Median logprob of walker is "+medianlogprob, Debug.INFO);
+		double toaddeachstep = -medianlogprob/maxsteps;
+		double tomultiplyeachstep = Math.exp(toaddeachstep);
+		Debug.println("Using rescaling factor of "+tomultiplyeachstep+" for walkers from "+startlati+","+startloni, Debug.INFO);
+		
+		//now run the walkers
+		for(int walker = 0; walker < numwalkers; walker++)
+		{
+			//Debug.println("Doing walker "+(walker+1), Debug.INFO);
+			double[][] steps = getPositionsOverTime(startlati, startloni, initialSpeed, initialAngle, speedDelta, orientDelta, maxsteps, false, tomultiplyeachstep);
+			double weight = steps[maxsteps][2]; //weight it according to the likelihood of the walk
+			for(int i = 1; i <= maxsteps; i++)
+			{
+				int x = (int) steps[i][0];
+				int y = (int) steps[i][1];
+				result[i].data[x][y] += weight;
+			}
+		}
+		
+		//now normalize
+		for(int i = 1; i <= maxsteps; i++) {
+			result[i].normalize();
+			result[i].multiplyBy(this.getProbByIndices(startlati, startloni));
+		}
+		
+		return result;
+	}
+	
+	
+	
+	//return a double array of length maxsteps, where each element is a triple with (xpos, ypos, logprob)
+	//
+	//
+	public double[][] getPositionsOverTime(int startlati, int startloni, Distribution initialSpeed, Distribution initialAngle, 
+			Distribution speedDelta, Distribution orientDelta, int maxsteps, boolean calcLogProb, double scalefactor)
+	{
+		//Each turn we select a speed-delta and an angle-delta and then move		
+		if(getProbByIndices(startlati, startloni) == 0)
+			throw new RuntimeException("Walking from zero square!");
+
+		if(calcLogProb && !Double.isNaN(scalefactor)) throw new IllegalArgumentException("!? ");
+		if(!calcLogProb && scalefactor < 0) throw new RuntimeException("negative scale factor?!");
+		
+		double xpos = startlati+0.5;
+		double ypos = startloni+0.5;
+		double speed = initialSpeed.drawFrom()/getSquareSize(); //work with speed in terms of squares per second
+		double angle = initialAngle.drawFrom();
+		int latsize = this.getDimensions()[0];
+		int lonsize = this.getDimensions()[1];
+		
+		//the last known valid x,y for walker that has gone out of bounds.
+		double oob_lastx = xpos;
+		double oob_lasty = ypos;
+
+		double[][] result = new double[maxsteps+1][];
+		if(calcLogProb)
+			result[0] = new double[] {xpos, ypos, 0.0};
+		else
+			result[0] = new double[] {xpos, ypos, 1.0};
+		
+		//while we are within bounds but in a zero-probability square, we need to try again
+		int retries = 0;
+		for(int t = 1; t <= maxsteps; t++)
+		{
+			//Debug.println("Try step "+t, Debug.INFO);
+			double speeddelta = speedDelta.drawFrom();
+			double angledelta = orientDelta.drawFrom();
+			speed += speeddelta;
+			angle += angledelta;
+			double xdelta = speed*Math.cos(angle);
+			double ydelta = speed*Math.sin(angle);
+			double nextxpos = xpos+xdelta;
+			double nextypos = ypos+ydelta;
+			
+			//if we go off into a place where to probability is zero, we redraw everything
+			if(nextxpos >= 0 && nextxpos < latsize && nextypos >= 0 && nextypos < lonsize && !isValidPath(xpos, ypos, nextxpos, nextypos))
+			{
+				speed -= speeddelta; //and speed
+				if(retries >= 20) 
+					angle = initialAngle.drawFrom(); //retry angle from initial prior
+				else 
+					angle -= angledelta; 
+				t--;
+				retries++;
+				continue; //try again
+			}
+			else
+				retries = 0;
+		
+			//OK, so are not moving to an area of zero prior. This means there are 4 possibilities
+			//1) We are out of bounds and stay out of bounds
+			//2) We are out of bounds and come back into bounds
+			//3) We are in bounds and go out of bounds
+			//4) We are in bounds and stay in bounds
+			
+			
+			//if we are out of bounds
+			if(xpos < 0 || xpos >= latsize || ypos < 0 || ypos >= lonsize)
+			{
+				//if we stay out of bounds no problem, we just go on wandering, so its only
+				//when we come back just assign to last valid square
+				if(nextxpos < 0 || nextxpos >= latsize || nextypos < 0 || nextypos >= lonsize) {
+					if(calcLogProb) result[t] = new double[] {nextxpos, nextypos, result[t-1][2]+Math.log(getProbByIndices((int) oob_lastx, (int) oob_lasty))};
+					else result[t] = new double[] {nextxpos, nextypos, result[t-1][2]*scalefactor*getProbByIndices((int) oob_lastx, (int) oob_lasty)};
+				}
+				else { //we come back in bounds
+					if(calcLogProb) result[t] = new double[] {nextxpos, nextypos, result[t-1][2]+Math.log(getProbByIndices((int) nextxpos, (int) nextypos))};
+					else result[t] = new double[] {nextxpos, nextypos, result[t-1][2]*scalefactor*getProbByIndices((int) nextxpos, (int) nextypos)};
+				}
+			}
+			//we are in bounds
+			else
+			{
+				//if we go out of bounds 
+				if(nextxpos < 0 || nextxpos >= latsize || nextypos < 0 || nextypos >= lonsize) {
+					oob_lastx = xpos;
+					oob_lasty = ypos;
+					if(calcLogProb) result[t] = new double[] {nextxpos, nextypos, result[t-1][2]+Math.log(getProbByIndices((int) xpos, (int) ypos))};
+					else result[t] = new double[] {nextxpos, nextypos, result[t-1][2]*scalefactor*getProbByIndices((int) xpos, (int) ypos)};
+				}
+				else { //we start in bounds and stay in bounds
+					if(calcLogProb) result[t] = new double[] {nextxpos, nextypos, result[t-1][2]+Math.log(getProbByIndices((int) nextxpos, (int) nextypos))};
+					else result[t] = new double[] {nextxpos, nextypos, result[t-1][2]*scalefactor*getProbByIndices((int) nextxpos, (int) nextypos)};
+				}
+			}
+			
+			
+			xpos = nextxpos;
+			ypos = nextypos;
+		}
+		
+		
+		return result;
+	}
+	
+	
+
+	/** For a walker starting at the original startx,starty, spread out r timesteps from this distribution
+	 * so, this.data tells us where we are *now*, and startlati, startloni tell us where we
+	 * started, so we want to know where we are after r timesteps.
+	 * @param startx
+	 * @param starty
+	 * @return
+	 */
+	public PMF getRadiusProb(int startlati, int startloni, int r, PMF spatialPrior, double[][][][] pathdists)
+	{
+		//System.out.println("At start "+startlati+","+startloni+" radius "+r);
+		if(spatialPrior.getProbByIndices(startlati, startloni) == 0.0)
+			throw new RuntimeException("geting radius prob from start square that has zero prior?!");
+			
+		double rsq = r*getSquareSize()*r*getSquareSize();
+		PMF next = new PMF(this.geography);
+		for(int i = Math.max(0, startlati-r); i <= startlati+r && i < data.length; i++)
+		{				
+			for(int j = Math.max(0, startloni-r); j <= startloni+r && j < data[0].length; j++)
+			{
+				double priorprob = spatialPrior.getProbByIndices(i, j);
+				if(priorprob <= 0) { //need this check because pathdists may be null for unreachable squares
+					next.data[i][j] = 0.0;
+					continue;
+				}
+
+				double dist = pathdists[startlati][startloni][i][j];
+				//System.out.println("    i,j "+i+","+j+" dist is "+dist);
+				if(dist*dist <= rsq) 
+				{					
+					if(priorprob > 0) 
+						next.data[i][j] = 1.0; 
+					else
+						next.data[i][j] = 0.0;
+				}
+			}
+		}
+		
+		//IMPORTANT TO NORMALIZE BEFORE WE MULTIPLY BY START PROBS, BECAUSE OTHERWISE WE OBLITERATE 
+		//THE ACTUAL START PROBABILITIES 
+		next.normalize();
+		next.multiplyBy(data[startlati][startloni]);
+
+		
+		return next;
+	}
+	
+
+	
+	
+	
+	
+	
+	
+	//just created as a backup some time ago. Not used
+	public PMF getRadiusProb_old(int startlati, int startloni, int r, PMF spatialPrior)
+	{		
+		//System.out.println("At start "+startlati+","+startloni+" radius "+r);
+		boolean hasZero = false;
+		boolean hasNonZero = false;
+		int rsq = r*r;
+		PMF next = new PMF(this.geography);
+		for(int i = Math.max(0, startlati-r); i <= startlati+r && i < data.length; i++)
+		{				
+			for(int j = Math.max(0, startloni-r); j <= startloni+r && j < data[0].length; j++)
+			{
+				int dist = (i-startlati)*(i-startlati)+(j-startloni)*(j-startloni);
+				//System.out.println("    i,j "+i+","+j+" dist is "+dist);
+				if(dist <= rsq) 
+				{
+					if(spatialPrior.data[i][j] > 0) 
+						next.data[i][j] = data[startlati][startloni];
+					else
+						next.data[i][j] = 0.0;
+				}
+				else hasZero = true;
+			}
+		}
+		
+		//if(!hasZero) //if it's non-zero everywhere then it is uniform, so we just return null to indicate that
+		//	return null;
+		
+		
+		//IMPORTANT NOT TO NORMALIZE, BECAUSE DOING SO OBLITERATES THE ACTUAL START PROBABILITIES DUMMY! next.normalize();
+		return next;
+	}
+	
+	
+	public void add(PMF pmf2)
+	{
+		if(this.data == null)
+			throw new RuntimeException("trying to do operation on ML pmf. These are read-only and you probably shouldnt ever be doing this");
+
+		if(pmf2.data.length != data.length || pmf2.data[0].length != data[0].length) throw new RuntimeException("Trying to add mismatched pmf's");
+		for(int x = 0; x < data.length; x++)
+		{
+			for(int y = 0; y < data[x].length; y++)
+				data[x][y] += pmf2.data[x][y];
+		}
+	}
+	
+	public void normalize()
+	{
+		if(this.data == null)
+			return; //ML pmfs are always normalized
+		
+		double tot = 0.0;
+		for(int x = 0; x < data.length; x++)
+			for(int y = 0; y < data[x].length; y++)
+				tot += data[x][y];
+		for(int x = 0; x < data.length; x++)
+			for(int y = 0; y < data[x].length; y++)
+				data[x][y]/=tot;		
+	}
+
+	public void print()
+	{
+		print(false, System.out);
+	}
+
+	public void printToFile(String fname) throws java.io.IOException
+	{
+		java.io.PrintStream ps = new java.io.PrintStream(new java.io.File(fname));
+		this.print(false, ps);
+		ps.close();
+	}
+	
+	
+	/*
+	 * sample an x,y from this pmf.
+	 * 
+	 * Returns the (x,y) tuple
+	 * 
+	 * This only works if the PMF is normalized.
+	 * It is *your* responsibility to make sure that the PMF is normalizd before you sample from it!
+	 */
+	public int[] sampleFrom()
+	{
+		if(this.data == null) //ML pmfs have only 1 non-zero location
+			return new int[] {latpos, lonpos};
+		
+		double r = Math.random();
+		int x = 0;
+		int y = 0;
+		double psum = data[x][y];
+		while(psum < r)
+		{
+			y++;
+			if(y == data[x].length) {
+				y=0; x++;
+			}
+			psum += data[x][y];
+		}
+		return new int[] {x,y};
+	}
+	
+	
+	/** Get best lat,long indices
+	 * 
+	 * @return
+	 */
+	public int[] getML()
+	{
+		if(data == null)
+			return sampleFrom();
+		
+		int maxlati = -1;
+		int maxloni = -1;
+		double maxval = 0.0;
+		for(int lati = 0; lati < data.length; lati++)
+		{
+			for(int loni = 0; loni < data[lati].length; loni++)
+				if(data[lati][loni] > maxval) 
+				{
+					maxlati = lati;
+					maxloni = loni;
+					maxval = data[lati][loni];
+				}
+		}
+		return new int[] {maxlati, maxloni};
+	}
+
+	public double[] getMLlatlon()
+	{
+		if(data == null)
+		{
+			return new double[] {
+				geography.getMinLat()+(latpos+0.5)*geography.getLatStepSize(), 
+				geography.getMinLong()+(lonpos+0.5)*geography.getLongStepSize()
+			};
+		}
+		int maxlati = -1;
+		int maxloni = -1;
+		double maxval = 0.0;
+		for(int lati = 0; lati < data.length; lati++)
+		{
+			for(int loni = 0; loni < data[lati].length; loni++)
+				if(data[lati][loni] > maxval) 
+				{
+					maxlati = lati;
+					maxloni = loni;
+					maxval = data[lati][loni];
+				}
+		}
+		return new double[] {
+				geography.getMinLat()+(maxlati+0.5)*geography.getLatStepSize(), 
+				geography.getMinLong()+(maxloni+0.5)*geography.getLongStepSize()
+		};
+	}
+
+	//read a PMF in from a file
+	//
+	//Each line is for a fixed lat, varying long. Starts at maxlat
+	//So, basically, the physical layout in the file matches the actual locations -- the top of the file is the
+	//max lon, the left is minlat, etc etc
+	//
+	public static PMF read(String filename, GISLayer geog) throws java.io.IOException
+	{
+		PMF p = new PMF(geog);
+		BufferedReader rdr = new BufferedReader(new FileReader(filename));
+		java.util.ArrayList<double[]> vals = new java.util.ArrayList<double[]>();
+		String line = rdr.readLine();
+		while(line != null)
+		{
+			String[] bits = Util.getWords(line);
+			double[] row = new double[bits.length];
+			for(int i =0; i < bits.length; i++) row[i] = Double.parseDouble(bits[i]);
+			vals.add(row);
+			line = rdr.readLine();
+		}
+		
+		p.data = new double[vals.size()][];
+		for(int i = 0; i < p.data.length; i++)
+			p.data[p.data.length-i-1] = vals.get(i);
+		
+		p.normalize();
+		
+		return p;
+	}
+	
+	public void print(boolean printGeogLayerToo, java.io.PrintStream ps)
+	{
+		if(data == null)
+			throw new UnsupportedOperationException("Not implemented yet");			
+		
+		int maxlati = -1;
+		int maxloni = -1;
+		double maxval = 0.0;
+		for(int lati = 0; lati < data.length; lati++)
+		{
+			for(int loni = 0; loni < data[data.length-lati-1].length; loni++)
+				if(data[data.length-lati-1][loni] > maxval) 
+				{
+					maxlati = data.length-lati-1;
+					maxloni = loni;
+					maxval = data[data.length-lati-1][loni];
+				}
+			rses.util.Util.printarray(data[data.length-lati-1], ps);	
+			if(printGeogLayerToo) { ps.print("GEOGLAYER: "); rses.util.Util.printarray(this.geography.continuousdata[data.length-lati-1], ps);}	
+		}
+		ps.println("Maximum likelihood index is "+maxloni+" "+maxlati);
+	}
+	
+	
+	public void writeImage(String tag) throws java.io.IOException
+	{
+		if(data == null)
+			throw new UnsupportedOperationException("Not implemented yet");
+		
+		for(int lati=0; lati < geography.getLatSteps(); lati++)
+		{
+			for(int loni = 0; loni < geography.getLongSteps(); loni++)
+				geography.setValueByIndices(lati, loni, (float) data[lati][loni]);
+		}
+		geography.updateMaxMinVals();
+		
+		geography.generateGoogleEarthOverlay(geography.getLongSteps()*10, geography.getLatSteps()*10, Color.blue, Color.red, "XXX", tag);
+	}
+	
+	
+	
+
+
+	
+	PathNode[][] getGraph()
+	{
+		int xdim = this.getDimensions()[0];
+		int ydim = this.getDimensions()[1];
+
+		//first we build a graph of the area so that we can calculate shortest paths
+		PathNode[][] squares = new PathNode[xdim][ydim];		
+		for(int x = 0; x < xdim; x++)
+			for(int y = 0; y < ydim; y++) 
+				if(this.getProbByIndices(x, y) > 0)
+					squares[x][y] = new PathNode(-1, x, y, xdim, ydim);
+		
+		//add edges (weights are the -log of the spatial prior at the edge endpoint)
+		for(int x = 0; x < xdim; x++)
+			for(int y = 0; y < ydim; y++) 
+				for(int xoff = -1; xoff <= 1; xoff++)
+					for(int yoff = -1; yoff <= 1; yoff++)
+						//need to check dest out of bounds and get rid of self edge and make sure that
+						//the destination actual has a prior value > 0
+						if(x+xoff >= 0 && x+xoff < xdim && y+yoff >= 0 && y+yoff < ydim)
+						{
+							if(xoff == 0 && yoff == 0) continue; //dont add self-edges
+							if(squares[x][y] == null) continue; //can never reach here because prior is 0
+							if(squares[x+xoff][y+yoff] == null) continue; //can never get to dest because is unreachable
+							
+							double dist = -this.getLogProbByIndices(x+xoff, y+yoff);
+							double physicaldist = Math.sqrt(Math.pow(xoff*getSquareSize(), 2.0)+Math.pow(yoff+getSquareSize(), 2.0));
+							squares[x][y].addEdge(new rses.math.GraphEdge(squares[x][y], squares[x+xoff][y+yoff], dist, physicaldist));
+						}
+		
+		return squares;
+	}
+	
+	
+	public static void main(String[] args) throws IOException
+	{
+		//create a PMF
+		rses.spatial.GISLayer layer = new rses.spatial.GISLayer(-33,150,1,1,"test",new float[10][10]);
+		PMF pmf = new PMF(layer);
+		
+		//now initialize it so that it has some probabilities
+		for(int i = 0; i < pmf.data.length; i++)
+			for(int j = 0; j < pmf.data[0].length; j++)
+				pmf.data[i][j] = 1.0;
+		int starti = (int) (Math.random()*pmf.data.length);
+		int startj = (int) (Math.random()*pmf.data[0].length);
+		System.out.println("starti,startj are "+starti+","+startj);
+		pmf.data[starti][startj] = 100.0;
+		pmf.normalize();
+		pmf.writeImage("START");
+				
+		
+		PMF[] pmfs = pmf.project(10, new PMF(layer, true), null, new double[] {pmf.getSquareSize()+0.01});
+		for(int i = 0; i < pmfs.length; i++)
+			pmfs[i].writeImage("test_time_"+i);
+		
+	}
+	
+}

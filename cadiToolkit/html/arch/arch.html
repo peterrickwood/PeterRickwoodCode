@@ -1,0 +1,108 @@
+<html>
+<head>
+<title>CADI Toolkit -- architectural overview</title>
+</head>
+<body>
+
+<h1>Introduction</h1>
+
+<p>
+The CADI toolkit is designed to make certain computational
+tasks a lot easier. It was designed initially for internal
+only use, and so has a historical emphasis in the 
+following areas:
+
+<p>
+<ul>
+	Parallel constrained non-linear derivative-free inversion/optimization.
+	Parallel high-dimensional sensitivity analysis.
+	Parallel Markov Chain Monte Carlo sampling.
+</ul>
+
+<p>
+While we primarily use the toolkit to run computations on a networked 
+cluster computer, the toolkit also works just fine in stand-alone 
+(single-machine) mode. It also runs on normal desktop machines over
+a LAN.
+
+<p>
+The toolkit is written almost entirley in Java, with only a small
+amount of C code. If you wonder if Java is too slow for numerical
+work, see the <a href="../faq.html">FAQ</a>.
+
+<h2>General purpose/philosophy</h2>
+
+Message passing libraries like MPI allow you to program
+any parallel task you like, but can require a lot of
+effort. The aim of the toolkit is to provide parallel
+and single-machine implementations of common 
+computational algorithms that can then be used 
+via a point-and-click interface. 
+
+
+<h3> Making parallel computing easy</h3>
+<p>Common parallel programming tools 
+such as MPI provide a rich framework for parallel computing,
+but they require you to do all the work yourself. The
+primitives are flexible enough to allow you to do anything,
+but at possibly great programming effort. The philosophy of
+the toolkit is to provide implementations of some common 
+parallel tasks, and relieve the user of <i>any</i> parallel 
+programming. Thus, the toolkit works as a 'black-box' --
+you provide some of your code, and the toolkit will take
+care of distributing this code. Of course, in general,
+this is a hard thing to do, but for some tasks (like
+non-linear inversion) it is possible.
+
+<img src="tkfig.gif">
+
+
+<h3>Making parallel computing fault-tolerant</h3>
+
+As of 2006, MPI is still brittle to failure. That is,
+the failure of any single computer in a cluster brings
+any MPI program running to a halt. For computations that
+run for many days on many computers, we consider this 
+unacceptable. To date, all algorithms implementated
+in CADI toolkit will continue to work if any machines
+taking part in the computation fail (with the exception
+of the 'head' machine which hosts the point-and-click
+GUI). You can put an axe through half the machines in
+your cluster and the toolkit will not lock up, and will
+continue to run.
+
+
+<h3> A nicer interface for popular routines </h3>
+
+<p>
+Even if you only need to perform a computational
+task on a single machine, currently this is often
+done by writing your own version of some
+common routine, or obtaining either source code
+or library from another author and going through
+the laborious process of trying to get this
+compiled and/or linked with your own code. The
+toolkit has the advantage that it provides a 
+single well documented interface, and performs
+the linking between the numerical routine you
+wish to use and your code automatically at 
+run time. It also provides you with facilities
+to plot the results of some computations in real
+time (i.e. as the computation runs), and log
+results to file. You do not need to write any
+of this logging or plotting code, just like
+you dont need to write any parallel computing
+code if you want to run in parallel. 
+
+
+<h2>Technical details</h2>
+<p>
+This section still to be written.....
+
+<hr>
+Back to <a href="http://rses.anu.edu.au/cadi">CADI homepage</a><br>
+This page last updated 25/1/2006<br>
+Peter Rickwood.
+<a href="mailto:peter.rickwood@anu.edu.au">peter.rickwood@anu.edu.au</a>
+</body>
+</html>

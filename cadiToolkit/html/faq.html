@@ -1,0 +1,258 @@
+<html>
+<head>
+<title>CADI Toolkit FAQ</title>
+</head>
+<body>
+
+<ul>
+	<li><a href="#q0">Isnt Java too slow to do numerical computation?</a></li>
+	<li><a href="#q1">When I try and run the cadiserver, it aborts with an IOException</a></li>
+	<li><a href="#q2">Cadi server cant bind to a socket</a></li>
+	<li><a href="#q3">How do I run the CADI server on multi-CPU machines?</a></li>
+</ul>
+
+<hr>
+<a name="q0"><b>Isnt Java too slow to do numerical computation</b></a>
+
+<p>
+<b>Q</b>
+<p>
+I've heard that Java is slow, and is poorly suited to numerical computation.
+Are there faster C/Fortran implementations of the algorithms in the
+toolkit?
+
+<p>
+<b>A</b>
+<p>
+This question is a bit difficult to answer. Performance comparisons
+between languages are fraught with difficultly, and religious
+wars seem to break out over the issue of which is faster, and by how much.
+We consider that Java is <i>roughly</i> as fast as C and Fortran
+for most numerical tasks. On some specific tasks (in particular some
+Linear Algebra tasks) that require non-jagged arrays or peculiar
+memory management, Java may perform significantly worse, but we do not
+believe that the algorithms implemented in the toolkit would
+run much faster if written in another language. We are happy to
+live with the possibility of a small drop in performance for the
+other benefits that Java has. If you are skeptical, try out 
+the toolkit yourself and see if it is fast enough for your needs. 
+
+
+
+<hr>
+<a name="q1"><b>When I try and run the cadiserver, it aborts with an IOException</b></a>
+
+<p>
+<b>Q</b>
+<p>
+I have installed the cadi server just fine, following the process
+described in the install guide. Everything seemed to go fine. Then,
+when I try and run the cadi server, I get the following error:
+
+<p>
+<code>
+$ java CadiServer<br>
+Using file:/home/jean/cadiserver/caditk.jar as codebase<br>
+starting registry<br>
+starting acivation daemon<br>
+launching activation daemon (rmid) with: rmid -log 129.20.49.54.log<br>
+-J-Djava.security.policy=caditk.security.policy<br>
+aborting!!<br>
+Unhandled Exception..... java.io.IOException: java.io.IOException: No <br>
+such file or directory<br>
+java.io.IOException: java.io.IOException: No such file or directory<br>
+   at java.lang.ConcreteProcess.ConcreteProcess(java.lang.String[], <br>
+java.lang.String[], java.io.File) (/usr/lib/libgcj.so.6.0.0)<br>
+   at java.lang.Runtime.execInternal(java.lang.String[], <br>
+....
+</code>
+
+<p>
+<b>A</b>
+<p>
+There are two possible causes. If you see the library
+/usr/lib/libgcj.so is loaded (as it is above, see the error lines), 
+then the problem (on Linux/Unix systems) is caused because
+you are using GNU java (hence the reference to /usr/lib/libgcj.so.6.0.0),
+and, currently, GNU java is not complete enough to run the cadi server.
+You need a full featured java SDK (such as the one from Sun) instead.
+Basically, when you type 'java' or 'rmid' or 'rmiregistry' at a 
+command prompt, you need to ensure you get the Sun versions of these 
+programs, not the GNU ones. Install Sun's SDK and adjust your path 
+accordingly.
+<p>
+If you are <i>sure</i> that you are using Suns java tools
+(<code>java -version</code> will tell you), then the problem is
+probably just that the cadi toolkit cannot find the <code>rmid</code>
+program, which is one of the programs that comes with Sun's SDK.
+You need to make sure that this program is in your path.
+
+
+
+
+<hr>
+<a name="q2"><b>Cadi server cant bind to a socket</b></a>
+
+<p>
+<b>Q</b>
+<p>
+When I attempt to start the CadiServer, the server fails to
+start properly, and complains about not being able to 
+connect to a socket. Here is the error message
+
+<code>
+$ java CadiServer<br>
+Using file:/home/jean/cadiserver/caditk.jar as codebase<br>
+starting registry<br>
+starting acivation daemon<br>
+launching activation daemon (rmid) with: rmid -log 129.20.49.54.log <br>
+-J-Djava.security.policy=caditk.security.policy<br>
+waiting for registry and activation daemon to start...<br>
+rmid err&gt; Activation.main: an exception occurred: Exception creating <br>
+connection to: 129.20.49.54; nested exception is:<br>
+rmid err&gt;       java.net.SocketException: Invalid argument or cannot <br>
+assign requested address<br>
+rmid err&gt; java.rmi.ConnectIOException: Exception creating connection to: <br>
+129.20.49.54; nested exception is:<br>
+rmid err&gt;       java.net.SocketException: Invalid argument or cannot <br>
+assign requested address<br>
+rmid err&gt;       at <br>
+sun.rmi.transport.tcp.TCPEndpoint.newSocket(TCPEndpoint.java:580)<br>
+rmid err&gt;       at <br>
+sun.rmi.transport.tcp.TCPChannel.createConnection(TCPChannel.java:185)<br>
+rmid err&gt;       at <br>
+sun.rmi.transport.tcp.TCPChannel.newConnection(TCPChannel.java:171)<br>
+rmid err&gt;       at sun.rmi.server.UnicastRef.newCall(UnicastRef.java:313)<br>
+rmid err&gt;       at sun.rmi.registry.RegistryImpl_Stub.rebind(Unknown Source)<br>
+rmid err&gt;       at java.rmi.Naming.rebind(Naming.java:160)<br>
+rmid err&gt;       at sun.rmi.server.Activation.init(Activation.java:173)<br>
+rmid err&gt;       at <br>
+sun.rmi.server.Activation.startActivation(Activation.java:143)<br>
+rmid err&gt;       at sun.rmi.server.Activation.main(Activation.java:2064)<br>
+rmid err&gt; Caused by: java.net.SocketException: Invalid argument or <br>
+cannot assign requested address<br>
+rmid err&gt;       at java.net.PlainSocketImpl.socketConnect(Native Method)<br>
+rmid err&gt;       at <br>
+java.net.PlainSocketImpl.doConnect(PlainSocketImpl.java:305)<br>
+rmid err&gt;       at <br>
+java.net.PlainSocketImpl.connectToAddress(PlainSocketImpl.java:171)<br>
+rmid err&gt;       at <br>
+java.net.PlainSocketImpl.connect(PlainSocketImpl.java:158)<br>
+rmid err&gt;       at java.net.Socket.connect(Socket.java:452)<br>
+rmid err&gt;       at java.net.Socket.connect(Socket.java:402)<br>
+rmid err&gt;       at java.net.Socket.&lt;init&gt;(Socket.java:309)<br>
+rmid err&gt;       at java.net.Socket.&lt;init&gt;(Socket.java:124)<br>
+rmid err&gt;       at <br>
+sun.rmi.transport.proxy.RMIDirectSocketFactory.createSocket(RMIDirectSocketFactory.java:22)<br>
+rmid err&gt;       at <br>
+sun.rmi.transport.proxy.RMIMasterSocketFactory.createSocket(RMIMasterSocketFactory.java:128)<br>
+rmid err&gt;       at <br>
+sun.rmi.transport.tcp.TCPEndpoint.newSocket(TCPEndpoint.java:562)<br>
+rmid err&gt;       ... 8 more<br>
+starting ComputeServer object<br>
+<br>
+Starting up Compute Server.......<br>
+-------output truncated----------<br>
+</code>
+
+
+<p>
+<b>A</b>
+<p>
+The technical details of what is happening here are pretty uninteresting,
+so we will just describe how to fix it first, and those who are interested
+in finding out what the problem is can read on.
+<p>
+How to fix the problem:
+
+<p>
+<ol>
+	<li> Get a newer version of the CADI toolkit (version 0.3.1 or newer)<br>
+	     [Actually, all you really need is a newer version of CadiServer.class,
+              so you can just download the latest version of CadiServer.class from
+              <a href="http://galitsin.anu.edu.au/caditk/softwarerepository/current"> the CADI toolkit homepage </a>
+              and replace your existing CadiServer.class file in your cadiserver directory)]
+	</li>
+	<li> When you run <i>either the client or the server</i>, you need to provide
+             an additional argument on the command line, like this:<br>
+             <code>[/home/peter/cadiserver]%java -Djava.net.preferIPv4Stack=true CadiServer</code><br>
+		OR<br>
+             <code>[/home/peter/cadiclient]%java -Djava.net.preferIPv4Stack=true CadiClient /home/peter/cadiclient</code><br>
+        </li>
+</ol>
+
+<p>The technical details, for those who are interested, follow.
+
+<p>Java, by default, tries to use IPV6 sockets if they are available on
+the local host. Unfortunately, IPV6 does not work (or is not enabled) 
+on some machines/operating systems that claim to support it, and in
+this case Java can fail to create a valid socket. The solution outlined 
+above is to explicitly tell Java to try and use IPV4 if possible. An 
+alternative solution that people claim will work (but which we have not tried) 
+is to make sure that you have enabled IPV6 on your networking interfaces. 
+See you local friendly system administator for how to do this on your 
+system.
+
+
+<hr>
+<a name="q3"><b>Running CADI Server on multi-CPU machines</b></a>
+
+<p>
+<b>Q</b>
+<p>
+I have several dual-CPU machines, and I wish to run my computation
+across these machines. It seems like the CADI toolkit is designed
+for single-CPU clusters -- can I run it over dual-CPu machines?
+
+<p>
+<b>A</b>
+<p>
+Yes, you can. You are right, in that the toolkit is 
+designed for multiple single CPU machines. However, it will
+happily run on dual machines. The only problem is that, if 
+there is only one user running, it will, by default, only 
+use a single CPU on each machine. 
+
+<p>You can only get around this by creating your own text file,
+where each line of this text file contains the name of a machine
+that is running the CADI server. Machines with multiple CPUs 
+<i>should have an entry for every CPU</i>. Thus, if machine1
+an machine2 are single cpu machines and machine3 is a dual
+CPU machine, your file should be:
+
+<p>
+<code>
+machine1.somedomain.net<br>
+machine2.somedomain.net<br>
+machine3.somedomain.net<br>
+machine3.somedomain.net<br>
+</code>
+
+<p>
+When you run the Cadi toolkit, you should then specify this
+machinefile as follows:
+
+<p>
+<code>java -cp /tmp/cadiclient CadiClient /tmp/cadiclient --machinefile=MACHINEFILE</code><br>
+where MACHINEFILE is of course the name of the text file ou just created.
+
+<p>This approach does have the disadvantage that the CadiClient will 
+no longer automatically 'sniff' the network to see what CadiServers
+are available.
+
+<p>Also note that in an environment where you have 
+multiple concurrent computations running, each
+computation will take place on a separate CPU 
+automatically, so you do not need to follow the
+above machinefile approach.
+
+
+
+
+<hr>
+Back to <a href="http://rses.anu.edu.au/cadi">CADI homepage</a><br>
+This page last updated 25/1/2006<br>
+Peter Rickwood.
+<a href="mailto:peter.rickwood@anu.edu.au">peter.rickwood@anu.edu.au</a>
+</body>
+</html>

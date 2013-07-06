@@ -1,0 +1,179 @@
+<html>
+<head>
+<title>Optimisation using the CADI Toolkit</title>
+</head>
+<body>
+
+<h1>Optimising using the CADI toolkit</h1>
+
+<i>A note on terminology</i>: We use the term inversion
+and optimisation interchangeably in these documents.
+They are both the same thing.
+
+<p>
+Optimisation is the process of attempting to
+minimize some mathematical function. Usually,
+this function does <i>not</i> have a closed-form,
+and cannot be written down and manipulated 
+in mathematical language. Instead, the function
+is often the result of a complex simulation
+that describes a particular physical problem.
+
+<p>The toolkit has several built-in methods for
+performing such minimization. You
+simply need to provide your own piece of code
+that describes the function to be optimized.
+Your piece of code can be written in any
+language that compiles to a binary (such as 
+C/C++/Fortran etc), or any language that
+compiles to Java byte-code (such as
+Java).
+
+
+<h2>Background information</h2>
+
+<p>
+In order to use the toolkit for optimisation, you need
+to do certain things, depending on whether you want to
+plug in binary compiled code (C/C++/Fortran/Ada/etc) or
+Java class file code.
+
+<p>
+Concrete examples follow, but it is worthwhile
+aquainting yourself with the basic details and
+requirements first.
+
+<p>
+<a href="../arch/binreq.html">
+Requirements for binary-compiled languages (C/C++/Fortran/Ada/etc)
+</a>
+
+<p>
+<a href="../arch/javareq.html"> Requirements for Java class files</a>
+ 
+
+<h2> Step-by-step Examples </h2>
+
+<a name="step1">
+<h3>Step 1 -- Compile your code</h3>
+
+<p>
+You need to compile you code before you
+can plug it in to the toolkit. The following
+examples have full source code and instructions
+on how you would do this. The examples are all extremely
+simple, and can be solved analytically (i.e. it
+is silly to optimise them). We present such
+simple examples for illustrative purposes only.
+
+<p>
+<ul>
+<li><a href="Csimplepoly.html">Compiling C code for minimizing a simple polynomial (no IO)</a></li>
+<li><a href="Fsimplepoly.html">Compiling Fortran code for minimizing a simple polynomial (no IO)</a></li>
+<li><a href="JsimplepolyIO.html">Compiling Java code for minimizing a simple polynomial (IO)</a></li>
+<li><a href="CsimplepolyIO.html">Compiling C code for minimizing a simple polynomial (IO)</a></li>
+</ul>
+
+<p>
+Remember the object file or class file you create in this step,
+as you need to select it in <a href="#stepselect">step 3</a>.
+
+
+<hr>
+<h3>Step 2 -- Start up the Toolkit</h3>
+
+<p>
+At a shell or DOS prompt, you need to type the following:
+<table border=2>
+<tr><td>
+<code>java -cp /tmp/cadiclient CadiClient /tmp/cadiclient --local</code>
+</td>
+<td>To start the toolkit in <i>stand-alone</i> mode.</td>
+</tr>
+<tr><td>
+<code>java -cp /tmp/cadiclient CadiClient /tmp/cadiclient --distributed</code>
+</td>
+<td>To start the toolkit in <i>distributed</i> mode.</td></tr>
+</table>
+
+<p>
+The path argument (in this case <code>/tmp/cadiclient</code>)
+should be the absolute path to wherever you installed the client
+part of the CADI toolkit.
+
+<p>
+If all goes, well, you should see some information printed to the
+console, and then a window will pop up.
+
+<p>
+<table border=2>
+<tr><td>
+<code>
+$ java -cp /tmp/cadiclient/ CadiClient /tmp/cadiclient<br>
+adding repository http://rses.anu.edu.au/~peterr/cadi/caditk/softwarerepository/current/<br>
+adding repository file:/tmp/cadiclient/caditk.jar<br>
+scanning network for available nodes... please wait<br>
+waiting for replies from available nodes....<br>
+found 128 nodes<br>
+</td></tr>
+<tr><td>
+<img src="../images/tkmainwindow.png">
+</td></tr>
+</table>
+
+<a name="stepselect">
+<h3> Step 3 -- select your code </h3>
+
+<p>From the 'Inversion' menu, select the 'start new inversion'
+option. You will then be prompted to choose the compiled
+code that you created in <a href="#step1">Step 1</a>.
+
+<p>
+<table border=2>
+<tr><td>
+<img src="../images/tkobjselect.png">
+</td></tr>
+</table>
+
+<h3> Step 4 -- select optimisation method </h3>
+
+<p>You should now choose, from the drop down list, the
+optimisation method you with to use. After you select a method,
+you will need to make a few choices (such as how long to 
+run the optimisation for, and so on). After you have made these
+choices, click the 'Do Inversion!' button.
+
+<p>
+<table border=2>
+<tr><td>
+<img src="../images/tkinvmain.png">
+</td></tr>
+</table>
+
+
+<h3> Step 5 -- watch your optimisation </h3>
+
+<p>
+A new window will now pop up where you can monitor the
+progress of your optimisation be viewing plots
+that update in real time. You can safely close this
+window without aboting your optimisation.
+
+<p>
+<table border=2>
+<tr><td>
+<img src="../images/invplots.png">
+</td></tr>
+</table>
+
+
+<h3> That's it! </h3>
+
+
+<hr>
+Back to <a href="http://rses.anu.edu.au/cadi">CADI homepage</a><br>
+This page last updated 22/7/2005<br>
+Peter Rickwood.
+<a href="mailto:peter.rickwood@anu.edu.au">peter.rickwood@anu.edu.au</a>
+</body>
+</html>

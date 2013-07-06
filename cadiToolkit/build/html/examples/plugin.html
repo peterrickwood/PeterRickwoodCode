@@ -1,0 +1,51 @@
+<html>
+<head>
+<title>Writing a plugin for the CADI toolkit</title>
+</head>
+<body>
+
+<h1>Writing a plugin for the CADI toolkit</h1>
+
+<p>
+All plug-ins for the CADI tookkit must be distributed
+as Java archives (.jar files). In practice, this means
+that they must be written in Java.<a href="#footnote1">[1]</a>.
+
+<p>
+All classes in the archive must be in their own package
+(i.e. they <i>cannot</i> be in a 'default' package).
+
+<p>
+The jar file must contain a Manifest with the Main-Class
+attribute specifying the class that is to be 'run' if the
+extension is selected in the toolkit. This main class
+must either extend <code>java.lang.Thread</code> or 
+implement <code>java.lang.Runnable</code>. The preference
+is that you implement <code>java.lang.Runnable</code>.
+The main class must also have a no-argument constructor.
+
+<p>
+You must place this jar file in a directory called 'ext'
+in the cadi client directory. For example, if your cadi client
+is installed in <code>/some/path/cadiclient</code> then
+your plugin must be placed at 
+<code>/some/path/cadiclient/ext/myplugin.jar</code>. 
+
+<p>The extension will be added to the "Miscellaneous" menu
+in the toolkits main menubar. If selected, the zero argument
+constructor of the main class is called, and then the
+class' run() method is set running in a separate thread.
+
+
+<p>
+<a name="footnote1">[1] Or a language that
+can compile to Java bytecode. Python, for example
+can be compiled to java bytecode by the Jython
+python compiler/interpreter.</a>
+<hr>
+Back to <a href="http://rses.anu.edu.au/cadi">CADI homepage</a><br>
+This page last updated 17/5/2005<br>
+Peter Rickwood.
+<a href="mailto:peter.rickwood@anu.edu.au">peter.rickwood@anu.edu.au</a>
+</body>
+</html>

@@ -1,0 +1,169 @@
+<html>
+<head>
+<title>CADI client user guide</title>
+</head>
+<body>
+
+<h1>CADI Client User Guide</h1>
+
+<p>
+<b>Assumptions</b>: This guide assumes that you have sucessfully installed
+the CADI client. If you wish to use the client in distributed 
+mode, you must have installed and started any CADI servers, and
+disabled any firewall on your computer. See the 
+<a href="cadiserver.html">CADI Server user guide</a>
+
+<h2>Distributed and non-distributed modes</h2>
+
+<p>You can run the toolkit in 2 different modes, <i>standalone</i>
+and <i>distributed</i>.
+
+<h3>Stand-alone mode</h3>
+
+<p>If you just want to run on your local machine, you launch
+the CADI toolkit by typing:
+
+<p>
+<code>java -cp /tmp/cadiclient CadiClient /tmp/cadiclient</code>
+
+<p>You will need to change <code>/tmp/cadiclient</code> to be the
+path to where <i>you</i> installed the cadi client.
+
+<h3>Distributed mode</h3>
+
+<p>If you just want to do computations over several (or many)
+computers, you need to launch the toolkit by typing:
+
+<p>
+<code>java -cp /tmp/cadiclient CadiClient /tmp/cadiclient --distributed</code> 
+
+<p>
+The toolkit will then have a look on the network to see if there are
+any <a href="cadiserver.html">servers</a> available for computation.
+
+<table border=2>
+<tr><td>
+<code>
+$ java -cp /tmp/cadiclient CadiClient /tmp/cadiclient --distributed <br>
+....<br>
+scanning network for available nodes... please wait<br>
+waiting for replies from available nodes....<br>
+found 128 nodes
+</code>
+</td></tr>
+</table>
+
+<p>
+If it finds any servers, it will use them for any following computation. If
+it fails to find any available servers, it defaults to stand-alone 
+mode.
+
+
+<hr>
+
+<h2> Step-by-step Examples </h2>
+
+The easiest way to gain an initial appreciation of what the toolkit
+can do for you is to go through the <a href="examples/examples.html">
+step-by-step examples</a>.
+
+<hr>
+
+<h2>Automatic code downloading</h2>
+
+<p>
+The CADI client has the neat feature that it automatically
+upgrades itself, if you tell it to. You dont need to do <i>anything</i> 
+to obtain the latest bug-fixes or latest release of the 
+software -- it gets downloaded automatically whenever you
+start up the CADI client, provided you answer <code>YES</code>
+to enable this feature during the install of the client, and
+provided you have a working network connection when you start the 
+toolkit. If you have turned this option on, here is how it works:
+
+<h3>Network class loading</h3>
+<p>
+When you install the CADI client, you actually dont download 
+and install all the code that is required for the client to run. 
+The small piece of code that you run when you run the client
+(CadiClient.class) is merely a
+small 'stub' program that is clever enough to establish a 
+network connection and download the rest of the code it needs. 
+Every time it starts, it attempts
+to download the cadi software. The toolkit
+stores the URLs that it tries to download software from
+in a file called <code>repositoryURLs.txt</code>. It tries
+each of the entries in this file, in order. If it cannot
+download the software from any entry in this file, and
+cannot find a local copy of the software, it
+prints an error message and exits.
+
+<h4>Example -- always downloading the current version</h4>
+As an example, if you always want to run the latest version
+of the CADI client, you can specify a URL like
+<a href="http://galitsin.anu.edu.au/caditk/softwarerepository/current/">
+http://galitsin.anu.edu.au/caditk/softwarerepository/current/</a>
+during the install process, and then every time you start the client, 
+it will download the cadi software
+from this URL. 
+
+<h4>Example -- always running version 0.1</h4>
+
+<p>When you install the toolkit, if you always want to run, say, version
+0.1 of the toolkit, you can specify a URL that points to that
+version of the software (such as 
+<a href="http://galitsin.anu.edu.au/caditk/softwarerepository/0.1/">
+http://galitsin.anu.edu.au/caditk/softwarerepository/0.1/</a>).
+Alternatively, you can add the line 
+<code>http://galitsin.anu.edu.au/caditk/softwarerepository/0.1/</code>
+as the top line in the <code>repositoryURLs.txt</code> file in the
+<code>cadiclient</code> directory.
+
+
+<h4>Example -- disabling network class loading</h4>
+
+<p>When you install the cadi client, a copy of the CADI
+software is placed in the file <code>caditk.jar</code>. If
+you wish to disable network class loading, and always have
+the toolkit start up with the version of the CADI software
+'frozen' at the time of download, you need to imake an entry like
+this the first line in your <code>repositoryURLs.txt</code>
+file:<br>
+<code>file:/path/to/cadiclient/caditk.jar</code><br>
+
+<h4>Example -- adding additional code repositories in case one fails</h4>
+
+If you open the file repositoryURLs.txt in the cadiclient
+directory, you will find that it has several entries.
+Let us assume that your file has the following entries:
+<table border=2>
+<tr><td>http://galitsin.anu.edu.au/caditk/softwarerepository/current/
+</td></td>
+<tr><td>http://rses.anu.edu.au/~peterr/cadi/caditk/softwarerepository/current/
+</td></td>
+</table>
+
+Suppose that you know of another URL where the CADI software is located.
+(say <code>http://cadi.software.net/software/current/</code>). You simply need to
+add this entry as a new line to the <code>repositoryURLs.txt</code>
+file, and the CADI client will look at this URL if it cannot find the
+code from any of the other listed URLs.
+
+<hr>
+
+<h2>CADI client settings</h2>
+
+There is a file <code>.caditk</code> (note the period), which 
+specifies some environment variables for the toolkit. You should
+not need to mess with these, but you can take a look -- most of
+them should be self-explanatory. This file is created when
+you run the Cadi Installer.
+
+
+<hr>
+Back to <a href="http://rses.anu.edu.au/cadi">CADI homepage</a><br>
+This page last updated 25/1/2006<br>
+Peter Rickwood.
+<a href="mailto:peter.rickwood@anu.edu.au">peter.rickwood@anu.edu.au</a>
+</body>
+</html>

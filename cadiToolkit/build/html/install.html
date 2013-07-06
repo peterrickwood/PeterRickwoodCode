@@ -1,0 +1,219 @@
+<html>
+<head>
+<title>CADI Toolkit install guide</title>
+</head>
+<body>
+
+
+<h1> Installation Guide</h1>
+
+<p>
+There are two 'parts' to the toolkit, the client
+part and the server part. 
+
+<p>If you only want to run
+the toolkit in standalone mode (i.e. on a single 
+computer), you only need the <i>client</i>
+part. If you are new to the toolkit, we suggest you
+start by just installing the client part, and worry
+about the server part later, if and when you decide
+to start running your computations over multiple
+computers.
+
+<h2>Platforms the toolkit runs on</h2>
+
+<p>
+In standalone mode, we have sucessfully run the toolkit on
+Linux (SUSE 9.x/Redhat), Mac (OS X), Windows (XP), 
+UNIX (Sun/AIX). The Linux/Unix and Windows versions are best tested.
+
+<p>
+We have only tried running the toolkit in distributed 
+mode on Unix and Linux. We think that the code 'should' work
+on Mac and Windows, but we have not tried it yet (we dont
+currently have access to multiple Mac or Windows machines,
+and testing it on these platforms is not a priority unless
+we get lots of requests from users). If you want to try 
+running it on either of these platforms, we are of course
+still happy to help, but dont expect smooth sailing.
+
+<p>
+Also, running on a Linux/UNIX environment without NFS
+is not well tested. 
+
+<p>
+For these reasons, many of the following instructions assume 
+a Linux/Unix environment, and/or NFS. Where instructions are 
+given 
+for other platforms/configurations, be aware that the
+toolkit wont have been well tested in that configuration.
+Indeed, for each new release of the toolkit, we only
+do release testing on a Linux cluster with NFS. You have
+been warned. We'll consider changing our platform bias
+if and when it becomes apparent that people are intent
+on using on other platforms. 
+
+
+<h2>What compilers work with the toolkit</h2>
+
+<p>
+If you write your code in Fortran or C, or some other
+language that compiles to a binary, you should be
+aware that different compilers behave differently, and
+this may affect how they interoperate with the toolkit.
+We cover only the most common (C/C++/Fortran) here.
+
+<p>
+See <a href="arch/binreq.html">here</a> for more discussion
+of what you need to do to make your code work with
+the toolkit.
+
+
+<h3>C</h3>
+<p>Most C compilers should be fine, since the conventions
+are pretty well established. We have tested <code>gcc/g++</code> 
+and Intel's C/C++ compiler. If you are using C++, any
+entry points that the toolkit requires must be stand-alone
+(C-style) routines, not in any class. The rest of your
+code can of course be organized as you see fit.
+
+<h3>Fortran</h3>
+<p>Fortran compilers are less
+straightforward. You should ensure your compiler appends a 
+trailing underscore to subroutine names in the final
+binary (so a subroutine called <code>forward</code> actually
+gets an entry point in the binary called <code>forward_</code>).
+Most fortran compilers seem to append 1 underscore by default, 
+some append 2, and some append none. Many have compile-time
+flags to let you change this behaviour. The Intel Fortran
+comopiler appends a single underscore by default (or it did
+at the time of this writing), and GNU's fortran 77 compiler 
+(g77) appended 2 by default, though it contains a flag
+to change this to one.
+
+<p>If you are running the toolkit in distributed mode
+without NFS, there are some additional requirements about
+the way your compiler handles character array arguments,
+but since the toolkit is still considered untested/unstable when
+used in distributed mode without NFS, we do not wish to 
+go into details here, except to say that Intel's Fortran compiler
+and GNU's g77 both 'do the right thing', and should work fine.
+We dont know about the other compilers.
+
+
+<h2>Requirements</h2>
+<p>
+Before installing the toolkit, you need the following:
+
+<ul>
+<li> <b>Java SDK</b>[required for both client and server]<br>
+<p>
+A Java SDK must be installed on your computer.
+If you are not sure whether you have a Java SDK installed or not, you can
+check by searching for a directory called something like 
+j2sdk1.4.2_04 (the exact version numbers are unimportant, 
+but you do need j2sdk1.4 or higher. Older jdk's (1.3 and
+earlier) will not work). Alternatively,
+type <code>rmid</code> at a shell/DOS prompt and see if you get
+a response other than 'command not found'. If you do, you probably
+have a Java SDK already installed. 
+
+<p>
+If you dont have Java, you can get a 
+self-installing executable from 
+<a href="http://java.sun.com/j2se/index.jsp"> Sun </a>.
+You need the SDK download, not the JRE download.
+</li>
+<li> <b>A C compiler/linker</b>[Required for both client and server] </li><br>
+
+<li> <i>Optional</i> <b>Java3D support</b> [Required for client only, and only if you want to use
+the 3D visualisation features of the toolkit].
+
+<p> 
+If you want to use the 3D visualisation features
+of the toolkit, you need Java3D installed on your computer. 
+You can get Java3D for Sun and Windows platforms
+from <a href="http://java.sun.com/products/java-media/3D/download.html">
+Sun</a>. You can get Java3D for Linux from 
+<a href="http://www.blackdown.org/java-linux/java2-status/java-3d-status.html">
+Blackdown</a>. You can get Java3D for MAC OS X from 
+<a href="http://www.apple.com/downloads/macosx/apple/">apple</a>.</li>
+</ul>
+
+
+
+<h2>Installing the client</h2>
+
+<ol>
+<li> Download the file <code>cadiclient.zip</code> from
+the version of toolkit that you want (latest stable
+version is <a href="http://galitsin.anu.edu.au/caditk/softwarerepository/current">
+here </a>).</li>
+
+<li> Unzip the file (using WinZip or unzip). You should
+now have a directory called cadiclient. Open
+a command prompt in that directory.</li>
+
+<li> At the command prompt, type <code>java CadiInstaller</code>.
+Answer the questions that the installer asks you.</li>
+
+<li>(Optional) If you want other people to be able to use 
+the toolkit (apart from the person who installs it), you
+need to make the 'lib' directory writable by those 
+people. Alternatively, these people can install the
+CadiClient themselves instead, and each user can use
+his/her own version.</li>
+
+<li>
+You're done! Now go and read the <a href="userguide.html">
+User Guide</a> for details on how to run the toolkit, and
+how to use it.</li>
+</ol>
+
+<p>
+If anything goes wrong during the install (for example, you
+answer one of the prompted questions incorrectly, or wish
+to change your answer), it is perfectly safe to re-run
+the installer. You can do this any number of times.
+
+
+
+<a name="serverinstall"> </a><h2>Installing the server</h2>
+
+<ol>
+<li> Download the file <code>cadiserver.zip</code> from
+the version of toolkit that you want (latest stable
+version is <a href="http://galitsin.anu.edu.au/caditk/softwarerepository/current">
+here </a>). </li>
+
+<li> Unzip the file (using WinZip or unzip). You should
+now have a directory called cadiserver. Open
+a command prompt in that directory.</li>
+
+<li> At the command prompt, type <code>java CadiInstaller</code>.
+Answer the questions that the installer asks you.</li>
+
+<li><i>Optional</i> If you know about Java's security policy
+syntax, you may like to modify the security file 
+<code>caditk.security.policy</code> that ships with the server.</li>
+
+
+<li> You're done! Now go and read the <a href="userguide.html">
+User Guide</a> for details on how to run the toolkit, and
+how to use it.</li>
+
+</ol>
+
+<p>
+If anything goes wrong during the install (for example, you
+answer one of the prompted questions incorrectly, or wish
+to change your answer), it is perfectly safe to re-run
+the installer. You can do this any number of times.
+
+<hr>
+Back to <a href="http://rses.anu.edu.au/cadi">CADI homepage</a><br>
+This page last updated 25/1/2006<br>
+Peter Rickwood.
+<a href="mailto:peter.rickwood@anu.edu.au">peter.rickwood@anu.edu.au</a>
+</body>
+</html>

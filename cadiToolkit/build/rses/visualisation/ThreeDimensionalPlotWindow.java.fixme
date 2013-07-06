@@ -1,0 +1,497 @@
+package rses.visualisation;
+
+import com.sun.j3d.utils.geometry.Box;
+import com.sun.j3d.utils.geometry.Cylinder;
+import com.sun.j3d.utils.geometry.Sphere;
+import com.sun.j3d.utils.universe.*;
+import javax.media.j3d.*;
+import javax.swing.JComboBox;
+import javax.vecmath.*;
+import com.sun.j3d.utils.behaviors.vp.*;
+
+public class ThreeDimensionalPlotWindow extends java.awt.Panel
+{
+	private static final Color3f black = new Color3f(0,0,0);
+	private SimpleUniverse u;
+	private float[][] points;
+
+
+	private String[] axesnames = new String[] {"X", "Y", "Z"};
+
+
+	public static void displayPlotWindow(ThreeDimensionalPlotWindow plot, int width, int height)
+	{
+		javax.swing.JFrame f = new javax.swing.JFrame();
+		f.setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
+		f.setSize(width, height);
+		f.getContentPane().add(plot);
+		f.show();
+		//new com.sun.j3d.utils.applet.JMainFrame(plot, width, height).setDefaultCloseOperation(javax.swing.WindowConstants.HIDE_ON_CLOSE);
+	}
+
+
+
+
+	public static void guiPromptUserForPlot(java.util.List modelList, double besterr, double worsterr, 
+		double[][] bounds)
+	{
+		guiPromptUserForPlot(modelList, besterr, worsterr, bounds, null);
+	}
+
+
+
+
+	/** Prompt the user to select X/Y/Z axes for a plot
+	 * 
+	 * @param modelList The models to be plotted.
+	 * @param besterr
+	 * @param worsterr The worst misfit of any model to be plotted. If any models in 
+	 *                          <code>modelList</code> have a misfit worse than this, then 
+	 *                          they will still be plotted, but they will be outside the bounded
+	 *                          cube that is drawn.
+	 * @param bounds
+	 * @param parameterNames An array that describes a mapping from the Integers 
+	 *              (0...num_dimensions-1) to Strings specifying what each parameter axis 
+	 *              should be called. All mappings <i>must</i> be present. 
+	 */
+	public static void guiPromptUserForPlot(java.util.List modelList, double besterr, double worsterr, 
+		double[][] bounds, String[] parameterNames)
+	{
+		java.util.Vector items = new java.util.Vector();
+		java.util.Vector zitems = new java.util.Vector();
+		for(int i = 0; i < bounds.length; i++) {
+			if(parameterNames != null) {
+				String val = parameterNames[i];
+				if(val == null)
+					throw new IllegalArgumentException("No mapping for parameter "+i+"... mappings for ALL parameters must be present");
+				items.add(val);
+				zitems.add(val);
+			}
+			else {
+				items.add("p "+(i+1));
+				zitems.add("p "+(i+1));
+			}
+		}			
+		zitems.add("misfit");
+		zitems.add("ln(misfit+1)");
+
+		JComboBox xparam = new JComboBox(items);
+		xparam.setSelectedIndex(0);
+		xparam.setEditable(false);
+		JComboBox yparam = new JComboBox(items);
+		yparam.setSelectedIndex(0);
+		yparam.setEditable(false);
+		JComboBox zparam = new JComboBox(zitems);
+		zparam.setSelectedIndex(zitems.size()-2);
+		zparam.setEditable(false);
+			
+		javax.swing.JPanel xpanel = new javax.swing.JPanel();
+		xpanel.add(new javax.swing.JLabel("Parameter on X axis"));
+		xpanel.add(xparam);
+		javax.swing.JPanel ypanel = new javax.swing.JPanel();
+		ypanel.add(new javax.swing.JLabel("Parameter on Y axis"));
+		ypanel.add(yparam);
+		javax.swing.JPanel zpanel = new javax.swing.JPanel();
+		zpanel.add(new javax.swing.JLabel("Parameter on Z axis"));
+		zpanel.add(zparam);
+				 
+		int ret = javax.swing.JOptionPane.showConfirmDialog(null, 
+			new javax.swing.JComponent[] {xpanel, ypanel, zpanel},
+			"choose axes", 
+			javax.swing.JOptionPane.OK_CANCEL_OPTION);
+		if(ret == javax.swing.JOptionPane.CANCEL_OPTION)
+			return;
+		
+		int d1 = xparam.getSelectedIndex();
+		int d2 = yparam.getSelectedIndex();
+		String d3str = zparam.getSelectedItem().toString();
+		boolean ismisfit = d3str.equals("misfit");
+		boolean islnmisfit = d3str.equals("ln(misfit+1)");
+		int d3 = -1;
+		if(!ismisfit && !islnmisfit)
+			d3 = zparam.getSelectedIndex();
+		 
+		int nummods = modelList.size();
+		java.util.List tmplist = new java.util.ArrayList(nummods);
+		for(int i = 0; i < nummods; i++) 
+		{
+			rses.Model m = (rses.Model) modelList.get(i);
+			if(m != null) //may be null, as we are accessing asynchronously
+				tmplist.add(m);
+		}
+	
+		double[][] points = new double[tmplist.size()][4];
+		double[][] subbounds = new double[4][2];
+		subbounds[0][0] = bounds[d1][0]; subbounds[0][1] = bounds[d1][1];
+		subbounds[1][0] = bounds[d2][0]; subbounds[1][1] = bounds[d2][1];
+
+		if(ismisfit) {
+			subbounds[2][1] = worsterr; 
+			subbounds[2][0] = besterr;
+		}
+		else if(islnmisfit) {
+			subbounds[2][1] = Math.log(worsterr+1);
+			subbounds[2][0] = Math.log(besterr+1);
+		}
+		else {
+			subbounds[2][0] = bounds[d3][0];
+			subbounds[2][1] = bounds[d3][1];
+		}
+		subbounds[3][0] = Math.log(besterr+1);
+		subbounds[3][1] = Math.log(worsterr+1);
+		
+		for(int i = 0; i < points.length; i++)
+		{
+			rses.Model m = (rses.Model) tmplist.get(i);
+			double[] modparams = m.getModelParameters();
+			double misfit = m.getMisfit();
+			
+			points[i][0] = modparams[d1];
+			points[i][1] = modparams[d2];
+			if(ismisfit)
+				points[i][2] = misfit;
+			else if(islnmisfit)
+				points[i][2] = Math.log(misfit+1);
+			else
+				points[i][2] = modparams[d3];
+			points[i][3] = Math.log(misfit+1);
+		}
+		
+		ThreeDimensionalPlotWindow pw = new ThreeDimensionalPlotWindow(points, subbounds, 
+			(String) items.get(d1), (String) items.get(d2), d3str);
+		ThreeDimensionalPlotWindow.displayPlotWindow(pw, 600, 600);
+	}
+
+
+
+
+
+
+
+	private ThreeDimensionalPlotWindow(float[][] points)
+	{
+		this.points = points;
+		init();
+	}
+
+
+	/** Create a Plot window to plot the specified points.
+	 *   The points array is copied (not altered).
+	 * 
+	 * @param points The points to plot. Must be 3 or 4 dimensional
+	 * @param bounds The bounds on each parameter.
+	 */
+	public ThreeDimensionalPlotWindow(double[][] points, double[][] bounds, String xname, String yname, String zname)
+	{
+		if(points[0].length < 3 || points[0].length > 4)
+			throw new IllegalArgumentException("only 3 & 4 dimensional points can be plotted..... aborting");
+		this.points = new float[points.length][points[0].length];
+		for(int i =0; i < points.length; i++)
+		{
+			for(int j = 0; j < points[0].length; j++) {
+				double paramrange = bounds[j][1]-bounds[j][0];
+				this.points[i][j] = (float) ((points[i][j]-bounds[j][0])/paramrange);
+			}
+		}
+		
+		axesnames[0] = xname;
+		axesnames[1] = yname;
+		axesnames[2] = zname;
+
+		init();
+	}
+
+
+
+
+
+
+
+	private BranchGroup createSceneGraph() 
+	{
+
+		// Create the root of the branch graph
+		BranchGroup objRoot = new BranchGroup();
+
+
+		// Create the transform group node and initialize it to the
+		// identity.  Enable the TRANSFORM_WRITE capability so that
+		// our behavior code can modify it at runtime.  Add it to the
+		// root of the subgraph.
+		TransformGroup objTrans = new TransformGroup();
+		objTrans.setCapability(TransformGroup.ALLOW_TRANSFORM_WRITE);
+		objTrans.setCapability(TransformGroup.ALLOW_TRANSFORM_READ);
+		objRoot.addChild(objTrans);
+
+
+		//centred at origin, with 3 metres in each direction, just to be sure
+		BoundingBox bounds =
+		    new BoundingBox(new Point3d(-3.0,-3.0,-3.0), new Point3d(3.0,3.0,3.0));
+
+
+		// Set up the background
+		Color3f bgColor = black;
+		Background bgNode = new Background(bgColor);
+		bgNode.setApplicationBounds(bounds);
+		objRoot.addChild(bgNode);
+	
+		// Set up the directional lights & ambient light
+		setupLighting(bounds, objRoot);
+
+		//add the axes
+		addAxes(objRoot);
+        
+		//add all the data points
+		addPoints(objRoot, this.points);
+
+		// Have Java 3D perform optimizations on this scene graph.
+		objRoot.compile();
+
+		return objRoot;
+	}
+
+
+
+	private void addAxes(Group group)
+	{
+		//do the x axis
+		TransformGroup tg = new TransformGroup();
+		Transform3D rotate = new Transform3D();
+		rotate.rotZ(Math.PI/2);
+		Transform3D translate  = new Transform3D();
+		translate.set(new Vector3d(0.5,0.0,0.0));
+		translate.mul(rotate);
+		tg.setTransform(translate);
+
+		Cylinder xaxis = new Cylinder(0.02f, 1f);
+		tg.addChild(xaxis);
+		group.addChild(tg);
+
+		addText(group, axesnames[0], new Point3f(1.05f, -0.05f,-0.05f));	
+
+		//now do the Z axis (straight up)
+		tg = new TransformGroup();
+		rotate = new Transform3D();
+		rotate.rotZ(0.0);
+		translate  = new Transform3D();
+		translate.set(new Vector3d(0,0.5,0.0));
+		translate.mul(rotate);
+		tg.setTransform(translate);
+
+		Cylinder yaxis = new Cylinder(0.02f, 1f);
+		tg.addChild(yaxis);
+		group.addChild(tg);
+
+		addText(group, axesnames[2], new Point3f(-0.05f, 1.05f,-0.05f));
+	
+		//and lastly, the y axis (positive y is towards the user)
+		tg = new TransformGroup();
+		rotate = new Transform3D();
+		rotate.rotX(Math.PI/2);
+		translate  = new Transform3D();
+		translate.set(new Vector3d(0,0,0.5));
+		translate.mul(rotate);
+		tg.setTransform(translate);
+
+		Cylinder zaxis = new Cylinder(0.02f, 1f);
+		tg.addChild(zaxis);
+		group.addChild(tg);
+
+		addText(group, axesnames[1], new Point3f(-0.05f, -0.05f,1.05f));
+	
+		//now draw a translucent cube around the lot
+	    // Set up the transparency properties
+		Appearance app = new Appearance();
+		TransparencyAttributes ta = new TransparencyAttributes();
+		ta.setTransparencyMode(TransparencyAttributes.BLENDED);
+		ta.setTransparency(0.7f);
+		app.setTransparencyAttributes(ta);
+
+		// Set up the polygon attributes
+		PolygonAttributes pa = new PolygonAttributes();
+		pa.setCullFace(PolygonAttributes.CULL_NONE);
+		app.setPolygonAttributes(pa);
+
+		// Set up the material properties
+		Color3f objColor = new Color3f(0.5f, 0.5f, 0.5f);
+		app.setMaterial(new Material(objColor, black, objColor,
+                                             black, 1.0f));
+
+		TransformGroup tg2 = new TransformGroup();
+		Transform3D t3d = new Transform3D();
+		t3d.set(new Vector3f(0.5f,0.5f,0.5f));
+		tg2.setTransform(t3d);
+		Box b = new Box(0.5f, 0.5f, 0.5f, app);
+		tg2.addChild(b);
+		group.addChild(tg2);		
+	}
+
+
+
+	private void addText(Group group, String text, Point3f position)
+	{
+		Point3f scaledpos = new Point3f(
+			(float) (position.x*100),
+			(float) (position.y*100),
+			(float) (position.z*100)
+			);
+
+		TransformGroup g = new TransformGroup();
+		Transform3D scaletransform = new Transform3D();
+		scaletransform.set(0.01); //scale down by 100
+		g.setTransform(scaletransform);
+
+		Font3D f3d = new Font3D(new java.awt.Font("TestFont", java.awt.Font.PLAIN, 10),
+			new FontExtrusion());
+
+		Text3D txt = new Text3D(f3d, text, scaledpos);
+		Shape3D sh = new Shape3D();
+		Appearance app = new Appearance();
+		Material mm = new Material();
+		mm.setLightingEnable(true);
+		app.setMaterial(mm);
+		sh.setGeometry(txt);
+		sh.setAppearance(app);
+		g.addChild(sh);
+		group.addChild(g);
+	}
+
+
+
+	private static float[][] getTestPoints()
+	{
+		float[][] res = new float[100][3];
+		for(int i =0; i < res.length; i++)
+		{
+			res[i][0] = (float) (Math.random());
+			res[i][1] = (float) (Math.random());
+			res[i][2] = (float) (Math.random());
+		}
+		return res;
+	}
+
+
+	private void addPoints(Group group, float[][] points)
+	{
+		if(this.points == null)
+			return; //no points
+		
+		double colourVal;
+		int numDims = points[0].length; 
+		
+		rses.visualisation.ColourGradient cg = new rses.visualisation.ColourGradient(java.awt.Color.red, 0.0, java.awt.Color.blue, 1.0);
+
+		for(int i = 0; i < points.length; i++)
+		{
+			Sphere sphere = new Sphere(0.01f);
+			TransformGroup sphereGroup = new TransformGroup();
+			Transform3D sphereXform = new Transform3D();
+			if(numDims == 3)
+				colourVal = points[i][2];
+			else //4 dimensions
+				colourVal = points[i][3];
+			sphereXform.set(new Vector3f(points[i][0], points[i][2], points[i][1]));
+			sphereGroup.setTransform(sphereXform);
+
+			//now set the appearance and colour
+			Appearance app = new Appearance();
+			java.awt.Color c = java.awt.Color.black;
+			if(colourVal <= 1.0) 
+				c = cg.getColour(colourVal);
+			float[] rgb = c.getRGBColorComponents(null);
+			Color3f color3f = new Color3f(rgb[0], rgb[1], rgb[2]);
+			Material mm = new Material();
+			mm.setEmissiveColor(color3f);
+			app.setMaterial(mm);
+
+			sphere.setAppearance(app);
+
+			sphereGroup.addChild(sphere);
+			group.addChild(sphereGroup);
+		}
+	}
+
+
+
+
+
+
+
+	private void setupLighting(Bounds bounds, 
+		Group objRoot)
+	{
+		//set up the ambient lighting
+		Color3f ambientColor = new Color3f(0.1f, 0.1f, 0.1f);
+	        AmbientLight ambientLightNode = new AmbientLight(ambientColor);
+	        ambientLightNode.setInfluencingBounds(bounds);
+	        objRoot.addChild(ambientLightNode);
+
+		//set up the directional lighting
+	        Color3f lightColor = new Color3f(0.2f, 0.2f, 0.2f);
+		Vector3f[] lightDirection = new Vector3f[6];
+	        lightDirection[0]  = new Vector3f(0.0f, 0.0f,-1.0f);
+	        lightDirection[1]  = new Vector3f(0.0f, 0.0f,1.0f);
+	        lightDirection[2]  = new Vector3f(1.0f, 0.0f,0.0f);
+	        lightDirection[3]  = new Vector3f(-1.0f, 0.0f,0.0f);
+	        lightDirection[4]  = new Vector3f(0.0f, 1.0f,0.0f);
+	        lightDirection[5]  = new Vector3f(0.0f, -1.0f,0.0f);
+
+		for(int i = 0; i < 6; i++)
+		{
+        		DirectionalLight light
+        		    = new DirectionalLight(lightColor, lightDirection[i]);
+        		light.setInfluencingBounds(bounds);
+        		objRoot.addChild(light);
+		}
+        	  
+	}
+
+     
+	public void init() 
+	{
+		setLayout(new java.awt.BorderLayout());
+		Canvas3D c = new Canvas3D(SimpleUniverse.getPreferredConfiguration());
+		this.add("Center", c);
+
+		// Create a simple scene and attach it to the virtual universe
+		BranchGroup scene = createSceneGraph();
+		u = new SimpleUniverse(c);
+
+		// add mouse behaviors to the ViewingPlatform
+		ViewingPlatform viewingPlatform = u.getViewingPlatform();
+
+	        // This will move the ViewPlatform back a bit so the
+	        // objects in the scene can be viewed.
+		TransformGroup VPTG = u.getViewingPlatform().getMultiTransformGroup().getTransformGroup(0);
+		Transform3D VPT3D = new Transform3D();
+		//      The third value in the Vector3f is the distance along the Z axis
+		//that you will need to set
+		VPT3D.setTranslation(new Vector3f(0.5f, 0.5f, 3.0f));
+		VPTG.setTransform(VPT3D);
+	        //OLD u.getViewingPlatform().setNominalViewingTransform();
+
+		// add orbit behavior to the viewing platform
+		OrbitBehavior orbit = new OrbitBehavior(c, OrbitBehavior.REVERSE_ALL);
+		BoundingSphere bounds =
+		    new BoundingSphere(new Point3d(0.0, 0.0, 0.0), 2.0);
+		orbit.setSchedulingBounds(bounds);
+
+		viewingPlatform.setViewPlatformBehavior(orbit);
+
+		u.addBranchGraph(scene);
+	}
+
+	public void destroy() {
+		u.cleanup();
+	}
+
+	//
+	// The following allows OrientedPtTest to be run as an application
+	// as well as an applet
+	//
+	public static void main(String[] args) {
+		ThreeDimensionalPlotWindow w = new ThreeDimensionalPlotWindow(getTestPoints());
+		ThreeDimensionalPlotWindow.displayPlotWindow(w, 600, 600);
+	}
+}
+

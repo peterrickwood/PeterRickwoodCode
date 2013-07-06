@@ -1,0 +1,192 @@
+<html>
+<head>
+<title>Requirments for binary code</title>
+</head>
+<body>
+
+<h1>Requirements for binary code</h1>
+
+<p>This page describes the basic details of 
+what is required of your code if you choose
+to write in a language that compiles
+to binary (such as C/C++/Fortran), and you wish
+to use that code with the CADI toolkit to
+perform optimisation or sensitivity analysis.
+
+<p>
+You must produce a compiled object file with entry points
+<code>initialize_ forward_</code> and <code>user_init_</code>. 
+In C and Fortran, the
+function signatures are as follows<br>
+
+<p>
+<table border=2 cellpadding=5>
+<tr><td width="50%">
+<p>
+C -- void initialize_(char* path, int* pathlenptr, int junk)
+<p>
+FORTRAN -- subroutine initialize(path, pathlen)<br>
+integer pathlen<br>
+character path(pathlen)
+</td>
+<td>
+<p>
+This function is only required when the toolkit
+is run in distributed mode. For stand-alone mode,
+you must still have the function, but it can 
+(and should) have an empty body.
+<p>
+In distributed mode, this function is called 
+by the toolkit before any of your other functions
+are called. The toolkit passes in an argument
+<code>path</code> that gives the absolute path
+to the diectory that holds your compiled object.
+If your code opens any files, you need to prepend
+this path argument to any files you open. You <i>cannot</i> 
+use paths without this prefix
+(such as in <code>open('datdir/datfile.dat')</code>).
+You are required to prepend the <code>path</code>
+string to your paths because the toolkit sometimes has
+to relocate your code while distributing it. The
+<code>initialize</code> function is the way in
+which the toolkit tells your code where it has 
+relocated the code to.
+<p>
+For C code, the path string is guaranteed to be 
+nul terminated. For Fortran code, the path string
+is guaranteed to have no trailing spaces/padding.
+
+<p>For those coding in C, please note that for 
+uninteresting technical reasons, their is an 
+additional argument <code>junk</code>
+that you should just ignore.
+</td>
+</tr>
+<tr><td width="50%">
+<p>
+C -- void user_init_(int* nd, float* ranges, float* scales)
+<p>
+FORTRAN -- subroutine user_init(nd, ranges, scales)<br>
+integer nd, real*4 ranges(*), real*4 scales(*)
+</td>
+<td>
+The user_init function is called by the toolkit
+at the start of the optimisation in order to get
+information about the optimisation. 
+
+<p>Your implementation
+must set <code>nd</code> to the number of dimensions
+in the parameter space you wish to optimize. 
+
+<p>The
+array <code>ranges</code> must be initialized
+(by you) to hold the minimum
+and maximum values for each parameter, in ascending 
+order (so the first element in the array is set
+to the minimum value of parameter 1, the second
+element to the maximum of parameter 1, the third to
+the minimum of parameter 2, and so on). 
+
+<p>The third argument <code>scales</code> can be ignored.
+</td></tr>
+<tr><td>
+<p>
+C -- void forward_(int* nd, float* model, float* mfit)
+<p>
+FORTRAN -- subroutine forward(nd, model, mfit)<br>
+integer nd, real*4 model(nd), real*4 mfit
+</td><td>
+<p>
+This is where your code does the 'real' work in the
+optimisation. 
+
+<p>The toolkit will call this function multiple
+times, passing in different points in the parameter space
+you define in <code>user_init</code>, and this function
+must evaluate the misfit of each of these points.
+
+<p>The value <code>nd</code> is passed in, and is the
+same value as set in your <code>user_init</code>
+function. 
+
+<p><code>model</code> is an array of 
+real numbers (of length <code>nd</code>) 
+specifying a point in the
+parameter space. 
+
+<p>Your function must set the
+value of <code>mfit</code> to be the misfit
+value of <code>model</code>. This value
+should be non-negative (negative values
+will still work, but some of the graphs/plots
+produced by the toolkit will look funny. 
+Lower misfit values indicate better models.
+
+<p>If you are using some of the statistical routines
+in the toolkit (like the Markov Chain Monte Carlo
+sampler), this routine should return 
+log(prior(model)*likelihood(data|model)), and, 
+if the <code>nd</code> argument is negative,
+should return prior(model).
+
+ 
+</td></tr>
+</table>
+
+<p>
+You can take your source code and produce a
+shared object with the following 2 steps
+<ol>
+<li>Compile all your source to object format: <code> fc -c *.f</code>
+<li>Create a shared object: <code> ld -shared *.o -o nativeUser.so </code>
+</ol>
+(The exact name of your compiler and linker may differ, of course)
+
+<p>If you have stuffed things up with linking somehow, you will get an
+<i>unsatisfied link error</i> printed to the terminal when you try and
+load your code in the toolkit. If you want to save yourself the
+trouble of starting up the toolkit and loading your code, you can check 
+if your code has any link errors by ommitting the '-shared' option in 
+the linking stage (i.e. by typing 'ld *.o -o linkTest.bin'). You will
+get a link error complaining about a missing/undefined MAIN
+method (this is normal, and OK), but you should not get any
+other link errors. If you do, you need to fix them first.
+
+<p>Finally, there are some restrictions to the files that
+your program may access while it is running. These restrictions are:
+
+<ul>
+<li>Any files (data files, for example) that your program
+uses must reside in the <i>same</i> directory, or a sub-directory of 
+the one in which your shared object is. </li>
+
+<li> 
+In stand-alone mode, you must specify the absolute path to 
+any input files. Relative paths never work. 
+See <a href="../examples/CsimplepolyIO.html">here</a> for an example.
+(Actually, you can either have the absolute path, or follow
+the scheme in the next step, for distributed mode -- both
+approaches will work in stand-alone mode.)
+</li>
+
+<li> [distributed mode only:] 
+When you open any files in your code, you must prepend the 
+<code>path</code> string (passed to your <code>initialize</code>
+function) to the path of the file that you want to open.
+Any files (data files, for example) that your program
+uses must also be accessible/readable by the user who is running
+the cadi server. Making it readable by everyone is one solution,
+if the data is not sensitive.
+
+</ul>
+
+
+
+
+<hr>
+Back to <a href="http://rses.anu.edu.au/cadi">CADI homepage</a><br>
+This page last updated 25/1/2006<br>
+Peter Rickwood.
+<a href="mailto:peter.rickwood@anu.edu.au">peter.rickwood@anu.edu.au</a>
+</body>
+</html>

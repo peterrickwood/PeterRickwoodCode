@@ -1,0 +1,93 @@
+<html>
+<head>
+<title>C example (simple polynomial)</title>
+</head>
+<body>
+
+<h1> Simple polynomial optimisation in C</h1>
+
+Suppose we wish to minimize a simple polynomial of degree 3. 
+The polynomial we wish to minimize is f(x,y,z) = x^3 + y^2 + 10z.
+Here is the entire C code for our simple example.
+In this case, we specify (in the user_init_ routine) 
+that we wish to find f(x)'s minima within the ranges
+x=(1,2) y=(1,2) z=(1,2).
+
+
+<p>
+Here is the complete C code for our example:
+
+<table border=2>
+<tr><td>
+<p>
+<code>
+void initialize_(char* path, int* pathlenptr, int junk)<br>
+{<br>
+/* Do nothing */<br>
+}<br>
+<br>
+<br>
+<br>
+<br>
+/* Set up the bounds of the parameter space<br>
+ * After being called, this function must have<br>
+ * a) set nd to be equal to the dimension of the<br>
+ *    parameter space being searched<br>
+ * b) set ranges[i][0] to be the lower bound on parameter i<br>
+ * c) set ranges[i][1] must hold the upper bound on parameter i<br>
+ * <br>
+ * Currently, the scales argument is ignored. You neednt do<br>
+ * anything to it.<br>
+ */<br>
+void user_init_(int* nd, float* ranges, float* scales) {<br>
+	*nd = 3;<br>
+	ranges[0] = 1.0f;<br>
+	ranges[1] = 2.0f;<br>
+	ranges[2] = 1.0f;<br>
+	ranges[3] = 2.0f;<br>
+	ranges[4] = 1.0f;<br>
+	ranges[5] = 2.0f;<br>
+	scales[0] = -1.0f;/* ignored */<br>
+}<br>
+<br>
+<br>
+/* nd (in) is the number of dimensions of the parameter space<br>
+ * model (in) is a point in that parameter space<br>
+ * mfitval (out) is the misfit that is assigned to 'model'<br>
+ * <br>
+ * In this simple example, we define our misfit to be a simple<br>
+ * polynomial. In real examples, you need to put your own code in<br>
+ * here.<br>
+ * <br>
+ * calculate misfit = x^3 + y^2 + 10z <br>
+ */<br>
+void forward_(int* nd, float* model, float* mfitval) {<br>
+	*mfitval = model[0]*model[0]*model[0]+model[1]*model[1]+10*model[2];<br>
+}<br>
+</code>
+</td></tr>
+</table>
+
+<h2>Compilation</h2>
+
+<p>
+You need to produce an object file to use with the toolkit. In this example
+we compile this code with <code>gcc -c test.c</code>, and the object file
+produced is test.o. If we had multiple source files (test1.c test2.c ... etc), 
+we would need to have a 2 step process of
+<ol>
+<li>Compiling the objects: <code> gcc -c *.c </code>
+<li>Combining the objects into a single shared object file: <code> gcc -shared *.o -o myobject.so </code>
+</ol>
+which would produce the object file <code>myobject.so</code>.
+This object file is all you need to start using the toolkit.
+
+
+
+<hr>
+Back to <a href="http://rses.anu.edu.au/cadi">CADI homepage</a><br>
+This page last updated 29/4/2005<br>
+Peter Rickwood.
+<a href="mailto:peter.rickwood@anu.edu.au">peter.rickwood@anu.edu.au</a>
+</body>
+</html>

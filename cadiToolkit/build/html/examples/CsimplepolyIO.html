@@ -1,0 +1,141 @@
+<html>
+<head>
+<title>C example (with IO)</title>
+</head>
+<body>
+
+<h1> Optimisation in C (with I/O)</h1>
+
+This example is the same as <a href="Csimplepoly.html">this
+one</a>, except that in this example, we read the 
+coefficients of the polynomial we wish to minimize
+from a file. This is meant to illustrate how you
+need to write your code if you wish use your code
+with the toolkit and your code reads from files.
+Here is what you need to remember when you write 
+your code:
+
+<h2> Relative paths dont work </h2>
+
+The main difference you need to be aware of
+is that your code does <i>not</i> execute
+in the directory in which it resides. As
+a result, you cannot use relative paths in
+your open statements. So, you cannot do something
+like <code>open('datfile.dat')</code> or
+<code>open('datdir/datfile.dat')</code>, since
+these file paths are relative. Instead, the
+CADI toolkit calls the <code>initialize</code>
+function in your code, and passes in the
+full (alsolute) path to the directory in
+which your code resides. You need to
+prepend this path to all your open statements. 
+
+<p>
+Here is the complete C code for our example:
+
+<table border=2>
+<tr><td>
+<p>
+<code>
+#include &lt;stdio.h&gt;<br>
+#include &lt;stdlib.h&gt;<br>
+<br>
+/* these are the polynomial coefficients that *<br>
+ * we will read from file. */<br>
+static int x3 = 0; <br>
+static int x2 = 0; <br>
+static int x1 = 0; <br>
+<br>
+/* This is where we remember the path to prepend *
+ * to our file open statements. */
+static char* prepend = NULL; <br>
+<br>
+<br>
+/* This method is guaranteed to be called first *<br>
+ * by the toolkit. The toolkit passes in the path *<br>
+ * that we need to prepend to our open statements */<br>
+void initialize_(char* path, int* pathlenptr, int junk)<br>
+{<br>
+/* remember the path, so that we can prepend it to *<br>
+ * our fopen calls later */<br>
+prepend = path;<br>
+}<br>
+<br>
+<br>
+<br>
+<br>
+/* Set up the bounds of the parameter space<br>
+ * After being called, this function must have<br>
+ * a) set nd to be equal to the dimension of the<br>
+ *    parameter space being searched<br>
+ * b) set ranges[i][0] to be the lower bound on parameter i<br>
+ * c) set ranges[i][1] must hold the upper bound on parameter i<br>
+ * <br>
+ * Currently, the scales argument is ignored. You neednt do<br>
+ * anything to it.<br>
+ */<br>
+void user_init_(int* nd, float* ranges, float* scales) {<br>
+	FILE* polyfile = NULL;<br>
+	char path[BUFSIZ];<br>
+<br>
+	/* polynomial is degree 3 */<br>
+	*nd = 3;<br>
+<br>
+	/* open the file that contains our polynomial coefficients */<br>
+	path[0] = '\0';<br>
+	strcat(path, prepend);<br>
+	strcat(path, "polyfile.dat");<br>
+	polyfile = fopen(path, "r");<br>
+<br>
+	fscanf(polyfile, "%d %d %d", &amp; x3, &amp; x2, &amp; x1);<br>
+<br>
+	/* set up the bounds on our parameters */<br>
+	ranges[0] = 1.0f;<br>
+	ranges[1] = 2.0f;<br>
+	ranges[2] = 1.0f;<br>
+	ranges[3] = 2.0f;<br>
+	ranges[4] = 1.0f;<br>
+	ranges[5] = 2.0f;<br>
+	scales[0] = -1.0f;/* ignored */<br>
+}<br>
+<br>
+<br>
+/* nd (in) is the number of dimensions of the parameter space<br>
+ * model (in) is a point in that parameter space<br>
+ * mfitval (out) is the misfit that is assigned to 'model'<br>
+ * <br>
+ * In this simple example, we define our misfit to be a simple<br>
+ * polynomial. In real examples, you need to put your own code in<br>
+ * here.<br>
+ * <br>
+void forward_(int* nd, float* model, float* mfitval) {<br>
+<br>
+	*mfitval = (float) (model[0]*model[0]*model[0]*x3 + <br>
+		   model[1]*model[1]*x2 + <br>
+		   model[2]*x1);<br>
+<br>
+}<br>
+</code>
+</td></tr>
+</table>
+
+<h2>Compilation</h2>
+
+<p>
+Compilation is the same as in the case <a href="Csimplepoly.html">without any IO</a>.
+That is, for a single file, you just do <code>gcc -c test.c</code>, and
+use the resulting <code>.o</code> file. For multiple
+source files, you do:
+<ol>
+<li>Compile the objects: <code> gcc -c *.c </code>
+<li>Combine the objects into a single shared object file: <code> gcc -shared *.o -o myobject.so </code>
+</ol>
+
+<hr>
+Back to <a href="http://rses.anu.edu.au/cadi">CADI homepage</a><br>
+This page last updated 29/4/2005<br>
+Peter Rickwood.
+<a href="mailto:peter.rickwood@anu.edu.au">peter.rickwood@anu.edu.au</a>
+</body>
+</html>

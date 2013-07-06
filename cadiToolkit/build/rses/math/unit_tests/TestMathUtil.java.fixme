@@ -1,0 +1,131 @@
+package rses.math.unit_tests;
+
+import rses.inverse.UserFunctionHandle;
+import rses.math.MathUtil;
+import rses.math.RealFunction;
+import junit.framework.TestCase;
+
+/**
+ */
+public class TestMathUtil extends TestCase 
+{
+
+	public static void main(String[] args) {
+		junit.swingui.TestRunner.run(TestMathUtil.class);
+	}
+
+	/*
+	 * @see TestCase#setUp()
+	 */
+	protected void setUp() throws Exception {
+		super.setUp();
+	}
+
+	/*
+	 * @see TestCase#tearDown()
+	 */
+	protected void tearDown() throws Exception {
+		super.tearDown();
+	}
+
+	/**
+	 * Constructor for TestMathUtil.
+	 * @param arg0
+	 */
+	public TestMathUtil(String arg0) {
+		super(arg0);
+	}
+
+	public void testCalculateFiniteDifference() 
+	{
+		int nvars = (int) (Math.random()*128+2);
+		UserFunctionHandle handle = getRandomUserFunctionHandle(nvars);
+		
+		//since the gradient is the same everywhere, it doesnt matter where we choose 
+		//our point
+		double[][] bounds = handle.getBoundsOnModelSpace();
+		double[] point = new double[nvars];
+		double[] stepsize = new double[nvars];
+		for(int i = 0; i <nvars ; i++) {
+			point[i] = bounds[i][0]+Math.random()*(bounds[i][1]-bounds[i][0]);
+			stepsize[i] = 0.01;
+		}
+				  
+		double[] grad = MathUtil.calculateFiniteDifference(RealFunction.generateRealFunction(handle), point, stepsize);
+
+		//test grad by using it to guess the misfit of a nearby point
+		double mf = handle.getErrorForModel(point);
+		double guessmf = mf;
+		for(int i =0;i<nvars;i++) {
+			if(point[i]+0.1 < bounds[i][1]) {
+				point[i] += 0.01;
+				guessmf += grad[i];
+			}
+		}
+		double newmf = handle.getErrorForModel(point);
+		assertTrue("Finite difference code is broken..... guessed misfit does not match one calculate from known gradient", Math.abs(newmf - guessmf) > 0.000001);
+	}
+
+	/** Generate a 'random' UserFunctionHandle with a linear gradient throughout
+	 *  its entire domain.  
+	 * 
+	 * @return
+	 */
+	private static rses.inverse.UserFunctionHandle getRandomUserFunctionHandle(int nvars)
+	{
+		class UserFuncImpl implements UserFunctionHandle 
+		{
+			private double[][] bounds;
+			private int degree; 
+			private double[] coeffs;
+			UserFuncImpl(int degree) 
+			{
+				this.bounds = new double[degree][2];
+				this.degree = degree;
+				this.coeffs = new double[degree];
+				for(int i = 0; i < degree; i++) 
+				{
+					bounds[i][0] = -Math.random()*10;
+					bounds[i][1] = Math.random()*10;
+					double range = bounds[i][1]-bounds[i][0];
+					coeffs[i] = bounds[i][0]+Math.random()*range;
+				}
+			}
+			
+			public int getDimensionOfModelSpace() {
+				return degree;
+			}
+			
+			public double getPriorForModel(double[] model)
+			{
+				throw new UnsupportedOperationException();
+			}
+			
+			public double getErrorForModel(double[] model) 
+			{
+				double err = 0.0;
+				double diff = 0.0;
+				for(int i=0; i < model.length; i++) {
+					diff = model[i]-coeffs[i];
+					err += diff*diff;
+				}
+				return err;
+			}
+						
+			public String getParameterName(int num) {
+				return "parameter "+num;
+			}
+			public void setParameterName(int num, String str) {
+				throw new UnsupportedOperationException();
+			}
+			
+			public double[][] getBoundsOnModelSpace()
+			{
+				return this.bounds;
+			}
+		}
+		return new UserFuncImpl(nvars);
+	}
+
+	
+}

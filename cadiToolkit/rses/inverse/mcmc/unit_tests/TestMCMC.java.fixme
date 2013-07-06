@@ -1,0 +1,53 @@
+/*
+ * Created on Jun 29, 2005
+ *
+ * To change the template for this generated file go to
+ * Window>Preferences>Java>Code Generation>Code and Comments
+ */
+package rses.inverse.mcmc.unit_tests;
+
+import junit.framework.TestCase;
+
+/**
+ * @author peterr
+ *
+ */
+public class TestMCMC extends TestCase {
+
+	public static void main(String[] args) {
+		junit.swingui.TestRunner.run(TestMCMC.class);
+	}
+
+	/*
+	 * @see TestCase#setUp()
+	 */
+	protected void setUp() throws Exception {
+		super.setUp();
+	}
+
+	/*
+	 * @see TestCase#tearDown()
+	 */
+	protected void tearDown() throws Exception {
+		super.tearDown();
+	}
+
+	/**
+	 * Constructor for TestMathUtil.
+	 * @param arg0
+	 */
+	public TestMCMC(String arg0) {
+		super(arg0);
+	}
+
+	
+	public void testDoLocal() {
+	}
+
+	public void testAcceptChange() {
+	}
+
+	public void testGenerateNewModel() {
+	}
+
+}

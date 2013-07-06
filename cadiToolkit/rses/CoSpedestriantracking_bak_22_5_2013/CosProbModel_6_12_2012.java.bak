@@ -1,0 +1,777 @@
+package rses.CoSpedestriantracking;
+
+import java.util.Calendar;
+
+import rses.Debug;
+import rses.inverse.UserFunctionHandle;
+
+
+
+/** This class calculates the probability of a pedestrian's 'path' through space/time
+ * given the observed RSS measurments that we have. 
+ * 
+ * 
+ * @author peterr
+ *
+ */
+public class CosProbModel 
+{
+	private rses.spatial.GISLayer geography;
+	private RSSObservation[] observations;
+	private Distribution P0prior;
+	private PMF spatialPrior;
+	
+	private double alpha = 2.5; //attenuation with distance
+	private double sigma = 6.0; //noise
+	
+	
+	//these are solved for
+	double solvedP0;
+	PMF[] finalpmfs;
+	PMF[] sentinalpmfs;
+	
+	/**
+	 * 
+	 * @param geography
+	 * @param observations
+	 * @param P0prior
+	 * @param spatialPrior
+	 * @param shortestpathtrees this is the matrix of shortest path trees for each origin. So, for example,
+	 *                          shortestpathtrees[a][b] gives the shortest path tree from a,b to all other nodes.
+	 *  
+	 * @throws java.io.IOException
+	 */
+	public CosProbModel(rses.spatial.GISLayer geography, RSSObservation[] observations, Distribution P0prior,
+			PMF spatialPrior, double[][][][] pathlengths, int[][][][] pathsteps, 
+			double[][][][] pathdistances, PathNode[][] pathtrees,
+			Distribution speeddist, double attenuation, double noise) 
+	throws java.io.IOException
+	{
+		this.geography = geography;
+		this.observations = observations;
+		this.P0prior = P0prior;
+		this.spatialPrior = spatialPrior;
+		this.alpha = attenuation;
+		this.sigma = noise;
+		
+		//if paranoid, make sure that observations are sorted by time, and all share the same ID
+		if(Debug.equalOrMoreParanoid(Debug.DEBUG_NORMAL))
+			for(int i = 1; i < observations.length; i++) {
+				if(observations[i].time.before(observations[i-1].time)) throw new RuntimeException("Observations must be sorted in chronological order!");
+				if(!observations[i].sourceId.equals(observations[0].sourceId)) throw new RuntimeException("All observations must share the same source! "+observations[0].sourceId+" & "+observations[i].sourceId);
+			}
+
+		this.solve(pathlengths, pathsteps, pathdistances, pathtrees, speeddist);
+	}
+	
+	
+	
+	private void solve(double[][][][] pathlengths, int[][][][] pathsteps, double[][][][] pathdistances, 
+			PathNode[][] pathtrees, Distribution speeddist) 
+	throws java.io.IOException
+	{
+		/* OK, we dont know P0, so we actually try and solve for this simultaneously with 
+		 * position. We do this as follows:
+		 * 
+		 * Pick a bunch of 'trial' P0's and solve for x,y assuming P0 is known.
+		 * Then, once we have solved for x,y, work out what that probability of observing our observations
+		 * given the 'known' x,y and the 'trial' P0. 
+		 * 
+		 * We keep the P0 that maximizes the probability of observing the observations  
+		 * 
+		 */
+		double[] P0s = new double[10000];
+		for(int i = 0; i < P0s.length; i++)
+			P0s[i] = P0prior.drawFrom(); //our trial P0's
+		java.util.Arrays.sort(P0s);
+		
+		
+		/* Now keep trialing P0's and find the one that best fits our observations
+		 */
+		
+		class ufh implements rses.inverse.UserFunctionHandle {
+			RSSObservation[] rssobs = null;
+			double[][] bounds = null;
+			PMF spatialP = null;
+			double[][][][] pathlengths;
+			int[][][][] pathsteps;
+			double[][][][] pathdists;
+			PathNode[][] pathtrees;
+			Distribution speeddist;
+			ufh(RSSObservation[] robs, double[] bounds, PMF spatialP, double[][][][] pathlengths, 
+					int[][][][] pathsteps, double[][][][] pathdists, PathNode[][] pathtrees, Distribution speeddist) 
+			{
+				this.rssobs = robs;
+				this.bounds = new double[][] {{bounds[0], bounds[1]}};
+				this.spatialP = spatialP;
+				this.pathlengths = pathlengths;
+				this.pathdists = pathdists;
+				this.pathtrees = pathtrees;
+				this.speeddist = speeddist;
+				this.pathsteps = pathsteps;
+			}
+			public double getPriorForModel(double[] model) { throw new UnsupportedOperationException(); }
+			public String getParameterName(int pnum) { return "P0"; }
+			public void setParameterName(int pnum, String s) { throw new UnsupportedOperationException(); }
+			public int getDimensionOfModelSpace() { return 1; }
+			public double getErrorForModel(double[] m) {
+				try { 
+					//you can include the prior on P0 or not.... not sure what is best here
+					
+					//include prior
+					return  -Math.log(P0prior.pdf(m[0]))-getLogProb(CosProbModel.this.geography, this.rssobs, m[0], spatialP, pathlengths, pathsteps, pathdists, pathtrees, speeddist);
+					
+					//dont include it
+					//return  -getLogProb(CosProbModel.this.geography, this.rssobs, m[0], spatialP); 
+				}
+				catch(java.io.IOException ioe) { throw new RuntimeException(ioe); }
+			}
+			public double[][] getBoundsOnModelSpace() { return bounds; }
+		}
+		
+		
+		rses.Model startMod = new rses.Model(new double[] {P0s[P0s.length/2]});
+		rses.inverse.powell.PowellMin powellmin = new rses.inverse.powell.PowellMin(new ufh(observations, new double[] {P0s[0], P0s[P0s.length-1]}, spatialPrior, pathlengths, pathsteps, pathdistances, pathtrees, speeddist), new double[] {1.0},
+		1.0, startMod, 0L);
+		powellmin.setPrecision(0.01);
+		powellmin.run();
+		double bestP0 = powellmin.getBestModel().getModelParameter(0);
+		this.solvedP0 = bestP0; //remember P0 solution
+		Debug.println("Best P0 found via PowellMin is "+bestP0, Debug.INFO);
+		
+
+		/*OK, we know which P0 fits best, so we do a final estimate using that P0 
+		 * 
+		 */
+		Debug.println("Starting final estimation run with P0="+bestP0+"...", Debug.INFO);
+		//this.finalpmfs = getPMFs(geography, observations, bestP0, spatialPrior, true, pathlengths, pathsteps, pathdistances, pathtrees, speeddist, true);
+		this.finalpmfs = getPMFs_old(geography, observations, bestP0, spatialPrior, true, pathdistances)[1];
+		
+		//write out path to KML
+		writePath("ML_path.kml", finalpmfs, observations[0].time);
+		
+		//just for debugging, print out 'average' x,y over all timesteps
+		double xtot = 0, ytot = 0;
+		for(int i = 0; i < finalpmfs.length; i++) {
+			if(finalpmfs[i] == null)
+				continue;
+			int[] yx = finalpmfs[i].getML();
+			xtot += yx[1];
+			ytot += yx[0];
+		}
+		Debug.println("Average ML position is x= "+xtot/finalpmfs.length+" y= "+ytot/finalpmfs.length, Debug.INFO);
+		
+	}
+
+	
+	
+	public static void writePath(String kmlfilename, PMF[] pmfs, java.util.Calendar startTime)
+	throws java.io.IOException
+	{
+		java.util.Date[] dates0 = new java.util.Date[pmfs.length];
+		double[] lats0 = new double[pmfs.length];
+		double[] lons0 = new double[pmfs.length];
+		int count = 0;
+		
+		for(int t = 0; t < pmfs.length; t++)
+		{
+			if(pmfs[t] == null)
+				continue;
+			else
+				count++;
+		
+			//probably dont need to be this defensive, but performance is not an issue and I dont 
+			//want to work out how safe it is to just clone.
+			java.util.Calendar cal = Calendar.getInstance();
+			cal.setTime((java.util.Date) startTime.getTime().clone());
+			cal.add(java.util.Calendar.SECOND, t);
+			dates0[t] = (java.util.Date) cal.getTime().clone();
+			
+			double[] latlon = pmfs[t].getMLlatlon();
+			lats0[t] = latlon[0];
+			lons0[t] = latlon[1];
+		}
+		
+		//copy only the bits we have estimates for
+		java.util.Date[] dates = new java.util.Date[count];
+		double[] lats = new double[count];
+		double[] lons = new double[count];
+		count = 0;
+		for(int i = 0; i < dates0.length; i++)
+		{
+			if(dates0[i] != null) {
+				dates[count] = dates0[i];
+				lats[count] = lats0[i];
+				lons[count++] = lons0[i];
+			}
+		}
+
+		
+		
+		rses.spatial.util.GoogleEarthUtils.writePathToKML(kmlfilename, dates, lats, lons);
+	}
+	
+	
+
+	/** Get the log-prob of observing 'observations' given a P0 value of P0
+	 * 
+	 * We do this by solving for location, and then working out likelihood of observing each observation given P0.
+	 * 
+	 * @param geography
+	 * @param observations
+	 * @param P0
+	 * @return
+	 * @throws java.io.IOException
+	 */
+	private double getLogProb(rses.spatial.GISLayer geography, RSSObservation[] observations, double P0, 
+			PMF spatialPrior, double[][][][] pathlengths, int[][][][] pathsteps, double[][][][] pathdistances, PathNode[][] pathtrees,
+			Distribution speeddist) throws java.io.IOException
+	{
+		Debug.println("Getting logprob for P0 "+P0, Debug.IMPORTANT);
+
+		//first solve for location
+		//PMF[] pmfs = getPMFs(geography, observations, P0, spatialPrior, false, pathlengths, pathsteps, pathdistances, pathtrees, speeddist, true);
+		PMF[] pmfs = getPMFs_old(geography, observations, P0, spatialPrior, false, pathdistances)[1];
+			
+		//now find likelihood of observations given these locations and hypothesized P0
+		double logprob = 0.0;
+		for(int obs = 0; obs < observations.length; obs++)
+		{
+			double prob = 0.0;
+			int t = (int) ((observations[obs].time.getTimeInMillis()-observations[0].time.getTimeInMillis())/1000);
+			if(pmfs[t] == null)
+				continue;
+			//get the probability of observing the observation
+			for(double lat = geography.getMinLat()+geography.getLatStepSize()/2; lat < geography.getMaxLat(); lat += geography.getLatStepSize())
+				for(double lon = geography.getMinLong()+geography.getLongStepSize()/2; lon < geography.getMaxLong(); lon += geography.getLongStepSize())
+				{
+					double p = getConditionalProbabilityOfObservedSignalStrength(geography, observations[obs].observer, observations[obs], P0, lat, lon);
+					p *= pmfs[t].getProb(lat, lon);
+					prob += p;
+				}
+			logprob += Math.log(prob);
+		}
+		return logprob;
+	}
+	
+	
+	/** Get the pmfs for each time step given observations and assumed/known P0
+	 * 
+	 * @param geography
+	 * @param observations
+	 * @param P0
+	 * @param writeResults
+	 * @return
+	 * @throws java.io.IOException
+	 */
+	private PMF[][] getPMFs_old(rses.spatial.GISLayer geography, RSSObservation[] observations, double P0, 
+			PMF spatialPrior, boolean writeResults, double[][][][] pathdistances) 
+	throws java.io.IOException
+	{
+		long starttime = observations[0].time.getTimeInMillis()/1000;
+		long endtime = observations[observations.length-1].time.getTimeInMillis()/1000;
+
+		//create a PMF for each observation (maps index in observations array to the PMF for that observation)
+		java.util.Map<Integer, PMF> pmfs = new java.util.HashMap<Integer, PMF>();
+		for(int i = 0; i < observations.length; i++)
+		{
+			//create pmf from observation
+			PMF pmf = this.getProbabilityMap(geography, observations[i], P0, observations[i].observer);
+						
+			if(writeResults) {
+				int timet = ((int)(observations[i].time.getTimeInMillis()/1000 - starttime));
+				pmf.writeImage("_unconstrainedFromObs_t"+timet);
+				pmf.printToFile("unconstrainedFromObs_t"+timet+".txt");
+			}
+			
+			//pmf.print();
+			pmfs.put(i, pmf);
+			
+		}
+		
+		//OK, we have PMFs at each of the 'snapshot/observation' points. What
+		//we would like to do now is get a PMF for every timestep (regardless of 
+		//whether we have an observation), that also takes into account some constraint
+		//on how fast people can move. 
+		
+		//but before we do any of that, we 'combine' any observations that occur
+		//within the same second. We do that in this loop
+		PMF[] pmfbytimestep = new PMF[(int) (endtime-starttime+1)];
+		for(Integer i : pmfs.keySet()) //for each snapshot pmf
+		{
+			int t = (int) (observations[i].time.getTimeInMillis()/1000 - starttime);
+			if(pmfbytimestep[t] == null)
+				pmfbytimestep[t] = pmfs.get(i);
+			else
+			{
+				PMF pmf = pmfs.get(i);
+				
+				//The big question, whether to add or multiply probabilities....
+				//Bayes really says we should multiply, *but* not clear that this works
+				//better than averaging. 
+				
+				//pmfbytimestep[t].add(pmf);
+				pmfbytimestep[t].multiply(pmf, false);
+			}
+		}
+		
+		//normalize the probabilities of the 'sentinel' pmfs (i.e. the ones 
+		//we have actual data for)
+		int numsentinels = 0;
+		for(int t = 0; t < pmfbytimestep.length; t++)
+		{
+			if(pmfbytimestep[t] != null)
+			{
+				numsentinels++;				
+				
+				//We add in any 'prior' knowledge here. Adding it sooner means that
+				//a non-uniform prior has more weight (because it is added to each
+				//observation rather than each timestep). 
+				//
+				//We also HAVE to add it here (and not later), because we are
+				//normalizing here, and we need to apply our prior before normalizing
+				pmfbytimestep[t].multiply(spatialPrior, true);
+								
+				if(writeResults) pmfbytimestep[t].writeImage("t"+t);
+			}
+		}
+
+		
+		
+		////////////
+		////////////
+		////////////START TESTING
+		///////////
+		///////////
+		/*Distribution initialSpeed = new Distribution() {
+			@Override
+			public double pdf(double val) {
+				return 1;
+			}
+			@Override
+			public double drawFrom() {
+				return 1.4;
+			} 
+		};
+		
+		Distribution initialAngle = new Distribution() {
+			@Override
+			public double pdf(double val) {
+				return 1.0;
+			}
+			@Override
+			public double drawFrom() {
+				return Math.random()*2*Math.PI;
+			}
+		};
+		
+		Distribution speedDelta = new Distribution() {
+			@Override
+			public double pdf(double val) {
+				return 1.0;
+			}
+			@Override
+			public double drawFrom() {
+				return 0;
+			}
+		};
+		
+		Distribution orientDelta = new Distribution() {
+			@Override
+			public double pdf(double val) {
+				throw new RuntimeException("Should never be called");
+			}
+			
+			@Override
+			public double drawFrom() {
+				if(Math.random() < 0.9) return 0; //90% of the time we dont change direction at all
+				return new java.util.Random().nextGaussian()*Math.PI/9; //20 degrees stddev
+			}
+		};
+		
+		PMF[][][] projectedprior = new PMF[spatialPrior.getDimensions()[0]][spatialPrior.getDimensions()[1]][];
+		for(int lati = 0; lati < projectedprior.length; lati++)
+			for(int loni = 0; loni < projectedprior[0].length; loni++) 
+			{
+				if(spatialPrior.getProbByIndices(lati, loni) == 0)
+					continue;
+				Debug.println("Projecting from "+lati+","+loni, Debug.INFO);
+				projectedprior[lati][loni] = spatialPrior.getProjectionPMFs(lati, loni, initialSpeed, initialAngle, speedDelta, orientDelta, 100, 1000);
+				for(int i =1 ; i < projectedprior[lati][loni].length; i++)
+					//projectedprior[lati][loni][i].printToFile("proj_"+lati+"_"+loni+"_t"+i+".txt");
+					projectedprior[lati][loni][i].writeImage("proj_"+lati+"_"+loni+"_t"+i);
+			}
+		*/
+		
+		//for testing project_new
+		/*double[] speedprobs = new double[] {1,1,1,1,1,1,1,1,1,1,1, //0 and up to 1 m/s
+				1,1,1,1,1,1,1,1,1,1, //1-2 m/s
+				0.5,0.5,0.5,0.5,0.5,    //2-2.5 m/s
+				0.25,0.25,0.25,0.25,0.25,    //2.5-3 m/s
+				0.125,0.125,0.125,0.125,0.125,    //3-3.5 m/s
+				0.05,0.05,0.05,0.05,0.05,    //3.5-4 m/s
+				0.02,0.02,0.02,0.02,0.02,    //4-4.5 m/s
+				0.01,0.01,0.01,0.01,0.01     //4.5-5 m/s
+				}; 
+		speedprobs = new double[] {1,1,1,1,1,1,1,1,1,1,1, //0 and up to 1 m/s\
+				1,1,1,1,1,1,1,1,1,1
+				}; //GOOD RESULTS WITH THIS ONE 
+		*/
+		
+		//OK, now for each 'sentinel probability, we project it forward and backward until to becomes
+		//uniform (un-informative)
+		Debug.println("Projecting PMFs...", Debug.INFO);
+		PMF[][] projectedpmfs = new PMF[numsentinels][pmfbytimestep.length];
+		int scount = 0;
+		for(int t0 = 0; t0 < pmfbytimestep.length; t0++)
+		{
+			if(pmfbytimestep[t0] != null)
+			{
+				//now project it forward/backward
+				Debug.println("Projecting from t0="+t0, Debug.IMPORTANT);
+				int maxtimestepstoproject = Math.max(spatialPrior.getDimensions()[0], spatialPrior.getDimensions()[1])*2;
+				maxtimestepstoproject = Math.min(maxtimestepstoproject, pmfbytimestep.length);
+				double[] speeds = new double[] {1.500001, 3.00001, 6.00001};
+				PMF[] pmfdissapate = pmfbytimestep[t0].project(maxtimestepstoproject, spatialPrior, pathdistances, speeds);
+				//PMF[] pmfdissapate = pmfbytimestep[t0].project_new(maxtimestepstoproject, spatialPrior, pathdistances, speedprobs);				
+				
+				for(int toffset = 0; toffset < pmfdissapate.length; toffset++) 
+				{
+					if(t0+toffset < pmfbytimestep.length)
+						projectedpmfs[scount][t0+toffset] = pmfdissapate[toffset];
+					if(t0-toffset >= 0)
+						projectedpmfs[scount][t0-toffset] = pmfdissapate[toffset];
+					
+					//if(writeResults) pmfdissapate[toffset].writeImage("proj_from_"+t0+"_delta_"+toffset);
+				}
+				scount++;
+			}
+		}
+		
+		
+		//now that we have done that, we need to combine them all!
+		Debug.println("Combining projected PMFs into final PMFs...", Debug.INFO);
+		PMF[] finalest = new PMF[pmfbytimestep.length];
+		PMF priorcopy = new PMF(spatialPrior); //copy just in case
+		for(int t = 0; t < pmfbytimestep.length; t++) //for each time-slice
+		{
+			//combine all the estimates from each sentinel
+			PMF base = null;
+			for(int sentinel = 0; sentinel < projectedpmfs.length; sentinel++)
+			{
+				if(projectedpmfs[sentinel][t] == null) continue;
+				
+				if(base == null) 
+					base = projectedpmfs[sentinel][t]; 
+				else //its clear that we should multiply here, not add, or else uniform probs take over
+					base.multiply(projectedpmfs[sentinel][t], true); 
+			}
+			//done for time t!!!
+			if(base == null)
+				base = priorcopy;
+			//If there is no actual observation, we multiply once by the prior, because we need to 
+			//take that into account. If there is an observation, we dont need to multiply because
+			//that has already been taken into account
+			else if(pmfbytimestep[t] == null)
+				base.multiply(spatialPrior, true);
+			
+
+			finalest[t] = base;
+			
+			if(writeResults) base.writeImage("final_"+len5int(t));
+			
+			//work out maximum likelihood guess
+			int[] xy = base.getML();
+			System.out.println("Final ML est at time "+t+" is x= "+xy[1]+" y= "+xy[0]);
+		}
+		
+		
+		
+		//ok, so we have been through the projection once with uninformed priors about speed
+		//and orientation. Now lets try again a few times, updating our speeds and orientations
+
+		
+		
+		return new PMF[][] {pmfbytimestep, finalest}; 
+		//return pmfbytimestep;
+		
+	}
+	
+	
+	
+	
+	
+	private static PMF[] getUpdatedPMFs(PMF[] previousEstimates, PMF spatialPrior, double[] speeds, double[][][][] pathdists, int numsentinels, PMF[] pmfbytimestep, boolean writeResults)
+	throws java.io.IOException
+	{
+		//first lets go through and get the speed and orientation estimates for all time steps
+		int latsize = spatialPrior.getDimensions()[0];
+		int lonsize = spatialPrior.getDimensions()[1];
+		
+		double[][][][] speedsByTime = new double[previousEstimates.length-1][latsize][lonsize][];
+		double[][][][] orientsByTime = new double[previousEstimates.length-1][latsize][lonsize][];
+		for(int lat = 0; lat < latsize; lat++)
+			for(int lon = 0; lon < lonsize; lon++)
+				for(int t = 0; t < previousEstimates.length-1; t++)
+				{
+					double[][] speedsorients = PMF.getSpeedsAndOrientations(lat, lon, previousEstimates[t], previousEstimates[t+1], 1, speeds, pathdists);
+					speedsByTime[t][lat][lon] = speedsorients[0];
+					orientsByTime[t][lat][lon] = speedsorients[1];
+				}
+		
+		
+		//ok, now we have estimates of speed and orientation, we use those to do our projections.
+		
+		
+		Debug.println("Projecting PMFs...", Debug.INFO);
+		PMF[][] projectedpmfs = new PMF[numsentinels][pmfbytimestep.length];
+		for(int sent = 0; sent < numsentinels; sent++)
+			for(int i = 0; i < projectedpmfs.length; i++)
+				projectedpmfs[sent][i] = new PMF(spatialPrior.getGeography());
+		
+		int scount = 0;
+		for(int t0 = 0; t0 < pmfbytimestep.length; t0++)
+		{
+			if(pmfbytimestep[t0] != null)
+			{
+				//project sentinel forward/backward
+				Debug.println("Projecting from t0="+t0, Debug.IMPORTANT);
+				int maxtimestepstoproject = Math.max(spatialPrior.getDimensions()[0], spatialPrior.getDimensions()[1])*4;
+				maxtimestepstoproject = Math.min(maxtimestepstoproject, pmfbytimestep.length*2);
+				
+				for(int toffset = 0; toffset < maxtimestepstoproject; toffset++) 
+				{
+					//special case, projecting zero timesteps is just the sentinel
+					if(toffset == 0) {
+						projectedpmfs[scount][t0+toffset] = pmfbytimestep[t0];
+						continue;
+					}
+						
+						
+					for(int lat = 0; lat < latsize; lat++)
+						for(int lon = 0; lon < lonsize; lon++)
+						{
+							//project 1 timestep forward and backward at the different speeds and orientations
+							if(t0+toffset < pmfbytimestep.length)
+								projectedpmfs[scount][t0+toffset].add(projectedpmfs[scount][t0+toffset-1].project1fwd(lat, lon, spatialPrior, speedsByTime[t0+toffset][lat][lon], orientsByTime[t0+toffset][lat][lon]));
+							if(t0-toffset >= 0)
+								projectedpmfs[scount][t0+toffset].add(projectedpmfs[scount][t0+toffset-1].project1bwd(lat, lon, spatialPrior, speedsByTime[t0+toffset][lat][lon], orientsByTime[t0+toffset][lat][lon]));
+						}
+				}
+				scount++;
+			}
+		}
+		
+		
+		//now that we have done that, we need to combine them all!
+		Debug.println("Combining projected PMFs into final PMFs...", Debug.INFO);
+		PMF[] finalest = new PMF[pmfbytimestep.length];
+		PMF priorcopy = new PMF(spatialPrior); //copy just in case
+		for(int t = 0; t < pmfbytimestep.length; t++) //for each time-slice
+		{
+			//combine all the estimates from each sentinel
+			PMF base = null;
+			for(int sentinel = 0; sentinel < projectedpmfs.length; sentinel++)
+			{
+				if(projectedpmfs[sentinel][t] == null) continue;
+				
+				if(base == null) 
+					base = projectedpmfs[sentinel][t]; 
+				else //its clear that we should multiply here, not add, or else uniform probs take over
+					base.multiply(projectedpmfs[sentinel][t], true); 
+			}
+			//done for time t!!!
+			if(base == null)
+				base = priorcopy;
+			//If there is no actual observation, we multiply once by the prior, because we need to 
+			//take that into account. If there is an observation, we dont need to multiply because
+			//that has already been taken into account
+			else if(pmfbytimestep[t] == null)
+				base.multiply(spatialPrior, true);
+			
+
+			finalest[t] = base;
+			
+			if(writeResults) base.writeImage("final_"+len5int(t));
+			
+			//work out maximum likelihood guess
+			int[] xy = base.getML();
+			System.out.println("Final ML est at time "+t+" is x= "+xy[1]+" y= "+xy[0]);
+		}
+		
+return null; //TODO later
+		
+	}
+	
+	
+	
+	
+	
+	
+	private static String len5int(int x)
+	{
+		if(x < 0) throw new RuntimeException();
+		if(x < 10) return "0000"+x;
+		if(x < 100) return "000"+x;
+		if(x < 1000) return "00"+x;
+		if(x < 10000) return "0"+x;
+		if(x < 100000) return ""+x;
+		throw new RuntimeException();
+	}
+
+
+	/** This differs from the getPMFs_old function in that it does not to the same
+	 *  sort of 'smoothing' that that function does. Instead, it generates some
+	 *  walkers and tries to optimize the path of the walkers so that they follow
+	 *  probable paths.
+	 * 
+	 * @param geography
+	 * @param observations
+	 * @param P0
+	 * @param spatialPrior
+	 * @param writeResults
+	 * @param MLmode  This is an IMPORTANT parameter for performance reasons. In ML mode,
+	 *        we are only interested in getting back the maximum likelihood path. In this
+	 *        case, the PMF's returned will not, in fact, be PMFs, but will be effectively
+	 *        x,y pairings (because each PMF will have only 1 non-zero entry). In that
+	 *        case, we optimize and return the best path we can find.
+	 *        However, if MLmode is false, we try and estimate a PMF for each timestep, and
+	 *        this involves a lot of MCMC runs, which take a lot of time.
+	 * @return
+	 * @throws java.io.IOException
+	 */
+	private PMF[] getPMFs(rses.spatial.GISLayer geography, RSSObservation[] observations, double P0, 
+			PMF spatialPrior, boolean writeResults, double[][][][] pathlengths, int[][][][] pathsteps, double[][][][] pathdistances, 
+			PathNode[][] shortestpathtrees, Distribution speeddist, boolean MLmode) 
+	throws java.io.IOException
+	{
+		long starttime = observations[0].time.getTimeInMillis()/1000;
+		long endtime = observations[observations.length-1].time.getTimeInMillis()/1000;
+
+		//create a PMF for each observation (maps index in observations array to the PMF for that observation)
+		java.util.Map<Integer, PMF> pmfs = new java.util.HashMap<Integer, PMF>();
+		for(int i = 0; i < observations.length; i++)
+		{
+			//create pmf from observation
+			PMF pmf = this.getProbabilityMap(geography, observations[i], P0, observations[i].observer);
+						
+			if(writeResults) {
+				int timet = ((int)(observations[i].time.getTimeInMillis()/1000 - starttime));
+				pmf.writeImage("_unconstrainedFromObs_t"+timet);
+				pmf.printToFile("unconstrainedFromObs_t"+timet+".txt");
+			}
+			
+			//pmf.print();
+			pmfs.put(i, pmf);
+			
+		}
+		
+		//OK, we have PMFs at each of the 'snapshot/observation' points. What
+		//we would like to do now is get a PMF for every timestep (regardless of 
+		//whether we have an observation), that also takes into account some constraint
+		//on how fast people can move. 
+		
+		//but before we do any of that, we 'combine' any observations that occur
+		//within the same second. We do that in this loop
+		PMF[] pmfbytimestep = new PMF[(int) (endtime-starttime+1)];
+		for(Integer i : pmfs.keySet()) //for each snapshot pmf
+		{
+			int t = (int) (observations[i].time.getTimeInMillis()/1000 - starttime);
+			if(pmfbytimestep[t] == null)
+				pmfbytimestep[t] = pmfs.get(i);
+			else
+			{
+				PMF pmf = pmfs.get(i);
+				
+				//The big question, whether to add or multiply probabilities....
+				//Bayes really says we should multiply, *but* not clear that this works
+				//better than averaging. 
+				
+				//pmfbytimestep[t].add(pmf);
+				pmfbytimestep[t].multiply(pmf, false);
+			}
+		}
+		
+		//normalize the probabilities of the 'sentinel' pmfs (i.e. the ones 
+		//we have actual data for)
+		int numsentinels = 0;
+		for(int t = 0; t < pmfbytimestep.length; t++)
+		{
+			if(pmfbytimestep[t] != null)
+			{
+				numsentinels++;				
+				
+				//We add in any 'prior' knowledge here. Adding it sooner means that
+				//a non-uniform prior has more weight (because it is added to each
+				//observation rather than each timestep). 
+				//
+				//We also HAVE to add it here (and not later), because we are
+				//normalizing here, and we need to apply our prior before normalizing
+				pmfbytimestep[t].multiply(spatialPrior, true);
+								
+				if(writeResults) pmfbytimestep[t].writeImage("t"+t);
+			}
+		}
+		
+		
+		//ok, we have sentinel PMFS, we now need to try and find some 'likely' 
+		//walking paths
+		//FOR NOW, JUST GET THE ML PATH 
+		Walker walker = new Walker(pmfbytimestep, spatialPrior, speeddist, MLmode, shortestpathtrees, pathlengths, pathsteps, pathdistances, Math.max(1, pmfbytimestep.length*0.05));
+		
+		return walker.getPMFs();
+		
+	}
+
+
+	
+	
+	
+	
+
+   /**
+    Get a 2-d probability mass function, expressed as an array,
+    where:
+        pmf[x][y] is the probability of observing Pobs at receiver ri given P0,alpha,sigma, and
+        pmf[x+1][y] is the probability of same at minx+xstep,miny 
+        pmf[x][y] is the probability of same at minx,miny+ystep
+        etc 
+    */
+	private PMF getProbabilityMap(rses.spatial.GISLayer geography, RSSObservation obs, double P0, Observer observer)
+	{
+		PMF pmf = new PMF(geography);
+		
+		for(double lat = geography.getMinLat()+geography.getLatStepSize()/2; lat < geography.getMaxLat(); lat += geography.getLatStepSize())
+		{
+			for(double lon = geography.getMinLong()+geography.getLongStepSize()/2; lon < geography.getMaxLong(); lon += geography.getLongStepSize())
+			{
+				double pval = getConditionalProbabilityOfObservedSignalStrength(geography, observer, obs, P0, lat, lon);
+				pmf.setValue(lat, lon, pval);
+			}
+		}
+		pmf.normalize();
+		return pmf;
+	}
+	
+	
+	private double getConditionalProbabilityOfObservedSignalStrength(rses.spatial.GISLayer geography, Observer observer, RSSObservation obs, double P0, double lat, double lon)
+	{
+	    //get the distance in metres from the receiver to proposed deltax and deltay
+	    double distance = rses.math.MathUtil.getDistanceBetweenPointsOnEarth(observer.lat, observer.lon, lat, lon);
+	    distance = Math.sqrt(distance*distance+observer.z_metres*observer.z_metres);
+	    
+	    //Debug.println("Distance from "+observer.id+" to "+lat+" "+lon+" is "+distance, Debug.INFO);
+	    double pred = P0 - 10*alpha*Math.log10(distance);
+	    //Debug.println("Predicted signal strength at this distance is "+pred, Debug.INFO);
+	    double actual = obs.ss;
+	    //Debug.println("Actual observed signal strength at this distance is "+actual, Debug.INFO);
+	    double pd = rses.math.MathUtil.getGaussPdf(pred-actual, 0, sigma);
+	    //Debug.println("probability for this is "+pd, Debug.INFO);
+	    return pd;
+
+	}
+	
+	
+
+
+}

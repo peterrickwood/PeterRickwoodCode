@@ -1,0 +1,71 @@
+/*
+ */
+package rses.inverse.util.unit_tests;
+
+
+import junit.framework.TestCase;
+
+/**
+ */
+public class TestJavaUserFunctionHandle extends TestCase {
+
+	public static void main(String[] args) {
+		junit.swingui.TestRunner.run(TestJavaUserFunctionHandle.class);
+	}
+
+	/*
+	 * @see TestCase#setUp()
+	 */
+	protected void setUp() throws Exception {
+		super.setUp();
+	}
+
+	/*
+	 * @see TestCase#tearDown()
+	 */
+	protected void tearDown() throws Exception {
+		super.tearDown();
+	}
+
+	/**
+	 * Constructor for TestJavaUserFunctionHandle.
+	 * @param arg0
+	 */
+	public TestJavaUserFunctionHandle(String arg0) {
+		super(arg0);
+	}
+
+	public void testJavaUserFunctionHandle() {
+	}
+
+	public void testRecreate() {
+	}
+
+	public void testGetClassData() {
+	}
+
+	public void testGetImplementationClassname() {
+	}
+
+	public void testGetOrigClasspath() {
+	}
+
+	public void testGetBoundsOnModelSpace() {
+	}
+
+	public void testGetDimensionOfModelSpace() {
+	}
+
+	public void testGetErrorForModel() {
+	}
+
+	public void testGetParameterName() {
+	}
+
+	public void testSetParameterName() {
+	}
+
+
+	
+
+}

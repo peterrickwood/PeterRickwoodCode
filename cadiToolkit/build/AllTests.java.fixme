@@ -1,0 +1,75 @@
+import junit.framework.Test;
+import junit.framework.TestSuite;
+
+
+import java.io.*;
+
+
+
+/**
+ * @author peterr
+ *
+ *
+ * A coverall class to go and collect all the unit tests in the
+ * directories below and run them. Just run this class' main
+ * method and it should run all junit tests in all subdirectories
+ * (in the resource view or eclipse, it is easier to just right click 
+ * on this java file and run it as a Junit test)
+ *
+ */
+public class AllTests {
+
+	public static void main(String[] args) {
+		junit.swingui.TestRunner.run(AllTests.class);
+	}
+
+	public static Test suite() throws Exception {
+		TestSuite suite = new TestSuite("project-wide unit testing");
+		//$JUnit-BEGIN$
+		addTests("", new File("build"),suite);
+		//$JUnit-END$
+		return suite;
+	}
+	
+	private static void addTests(String classpath, File dir, TestSuite suite) throws Exception
+	{
+		//System.out.println("looking for unit_tests directory in "+dir.getAbsolutePath());
+		File[] files = dir.listFiles();
+		if(files == null)
+			return;
+		if(!dir.getName().equals("unit_tests")) 
+		{
+			for(int i =0; i < files.length; i++) 
+			{
+				if(files[i].isDirectory()) {
+					String clazzpath = classpath+"."+files[i].getName();
+					if(classpath.length() == 0)
+						clazzpath = files[i].getName();
+				
+					addTests(clazzpath, files[i], suite);
+				}
+			}
+		}
+		else //we are in a unit_tests directory
+		{
+			System.out.println("adding directory "+dir.getAbsolutePath()+" to unit test suite");
+			for(int i =0; i < files.length; i++)
+			{
+				String clazzname = classpath+"."+files[i].getName();
+				if(!clazzname.endsWith(".class"))
+					throw new RuntimeException("Found non-class file "+files[i].getName()+" in unit_tests directory");
+				clazzname = clazzname.substring(0, clazzname.length()-".class".length());
+
+				
+				Class clazz = AllTests.class.getClassLoader().loadClass(clazzname);
+				if(junit.framework.TestCase.class.isAssignableFrom(clazz)) {
+					System.out.println("\tadding test class "+clazzname);
+					suite.addTestSuite(clazz);
+				}
+				else {
+					System.out.println("\t"+clazzname+" is not an instance of TestCase");
+				}
+			}
+		}
+	}
+}

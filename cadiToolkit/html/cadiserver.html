@@ -1,0 +1,189 @@
+<html>
+<head>
+<title>CADI server user guide</title>
+</head>
+<body>
+
+<h1>CADI Server User Guide</h1>
+
+<h1>Introduction</h1>
+
+<p>
+If you wish to run the CADI Toolkit in distributed mode, 
+you need to install the CADI server on each of the nodes
+you wish to use in your computation.
+
+<p>
+The CADI server is essentially a program which sits around
+listening for computation requests from clients.
+
+<h2>Platforms the server runs on</h2>
+
+<p>
+Many of the following instructions assume a Linux/Unix
+environment, and/or NFS. Where instructions are given 
+for other platforms/configurations, be aware that the
+CADI server wont have been well tested in that configuration.
+Indeed, for each new release of the toolkit, we only
+do release testing on a Linux cluster with NFS. You have
+been warned.  
+
+<p> If you wish to run binary code (i.e compiled fortran/C),
+you can of course only do this on CADI servers that are
+running on a platform compatible with the one on which
+the binary was produced. For example, if you have compiled
+your code on an Linux Pentium machine, only CADI servers
+running on Linux Pentium compatible machines will be able
+to take part in the computation. But you already knew that.
+
+<h2>How to install and run the server </h2>
+
+<p>
+This guide assumes that you have already installed the 
+<a href="cadiclient.html">CADI client</a> on one machine
+(referred to here as <code>desktop.blah.net</code>) and have sucessfully
+used the toolkit in standalone mode on some of the
+<a href="examples/examples.html">examples</a>. If you have not already
+done this, do it first.
+
+<h3>Step 1 -- install the software on server machines </h3>
+<p>
+The next step is to install the server software. The procedure is
+essentially the same as the client install process, and is
+described <a href="install.html#serverinstall">here</a>. If you
+have a shared filesystem (such as NFS), then you only need to
+install the software once for each different architecture.
+If you do not have a shared filesystem, you will need to
+install the server software on every machine that you wish
+to function as a server machine. Each machine must also have
+java installed. The toolkit is only tested and known to run for
+Sun's version of Java, freely available <a href="http://java.sun.com">
+from Sun</a>. As of the time of writing, the GNU implementation
+of Java is known not to work.
+
+<p>
+For simplicity, we will assume all machines are of the same 
+architecture, and that they all share a network filesystem.
+We will assume that the machines you wish to run the server
+on are called <code>machine1.blah.net</code> and 
+<code>machine2.blah.net</code>, and 
+that your personal desktop machine (on which you 
+run the client), is called 
+<code>desktop.blah.net</code>. If you can get this
+to work, scaling things up to a larger number of servers
+should be obvious.
+
+We will assume that the cadi server software is installed at 
+<code>/import/linuxi386/cadi/cadiserver</code>.
+
+
+<h3> Step 2 -- Start the CADI server </h3>
+
+<p>
+On each machine that you wish to function as a compute server,
+you need to start the cadiserver software. This is done as follows:
+
+<p>
+Login to <code>machine1.blah.net</code>, change to directory 
+<codE>/import/linuxi386/cadi/cadiserver</code>, and
+type 'java CadiServer' at the prompt. You should get back 
+something like this:
+
+<p>
+<code>
+-----------------EXAMPLE OUTPUT-----------------------------------------<br>
+$ java CadiServer<br> 
+Using file:/import/linuxi386/cadi/cadiserver/caditk.jar as codebase<br>
+starting registry<br>
+starting acivation daemon<br>
+launching activation daemon (rmid) with: rmid -log 150.203.8.14.log <br>
+-J-Djava.net.preferIPv4Stack=true <br>
+-J-Djava.security.policy=caditk.security.policy <br>
+waiting for registry and activation daemon to start...<br>
+starting ComputeServer object<br>
+<br>
+Starting up Compute Server.......<br>
+<br>
+starting off listener Thread in ComputeServerImpl<br>
+Compute Server started up, entering listenForCommands() subroutine<br>
+Joining Cadi toolkit local multicast group<br>
+starting up UDP listener thread<br>
+waiting for TCP connections<br>
+Compute Server bound on host 150.203.8.14<br>
+------------------------------------------------------------------------------
+</code>
+
+<p>
+This indicates that the cadi server is now running on that host
+(in this case 150.203.8.14).
+
+<p>Now repeat step 2 for <code>machine2.blah.net</code>.
+
+<h3>Step 3 -- Run the client</h3>
+
+<p>Now, back on you own desktop, change to the cadiclient
+directory and type 
+<code>java CadiClient /import/linuxi386/cadi/cadiclient --distributed</codE>
+ and you should get something similar to the following
+
+<p>
+<code>
+-----------------EXAMPLE OUTPUT-------------------------------------<br>
+$ java CadiClient /import/linuxi386/cadi/cadiclient --distributed
+<br>adding repository /import/linuxi386/cadi/cadiserver/caditk.jar
+<br>Running toolkit in distributed mode
+<br>scanning network for available nodes... please wait
+<br>waiting for replies from available nodes....
+<br>Got reply from Compute Node on host 150.203.8.14 (arch=Linuxi386)
+<br>Got reply from Compute Node on host 150.203.8.15 (arch=Linuxi386)
+<br>adding 150.203.8.14 (Linuxi386) to list of available nodes
+<br>adding 150.203.8.15 (Linuxi386) to list of available nodes
+<br>found 2 nodes
+<br>--------------------------------------------------------------------------
+</code>
+
+<p>
+Now, you should be able to run computations with the toolkit and they will
+take place on machine1 and machine2.
+
+<h2>Some Notes</h2>
+
+<p>
+As already noted, if you wish to run fortran/C code over several machines, 
+they will of course all need to be the same platform (i.e. an executable on
+one machine should run on the other).
+
+<p>
+One thing to watch for is firewalls. If you find that the cadiclient cannot
+find any of the servers (even though they are running), then it may
+be because of restrictive firewalling on either the client or server 
+machine.
+
+<p>
+We realize these instructions are a little involved, but this is unavoidable
+if you want to use the toolkit in distributed mode. After you are used 
+to it, it is easy to scale up to a  larger number of machines. Below 
+is an example script that can be used to start up the server on 
+several machines, once you have got the hand of it.
+
+<p>
+<code>
+----SHELL SCRIPT TO START UP SERVER ON SEVERAL MACHINES------
+<br>#!/bin/bash
+<br>
+<br>machines="benioff cadiv1 lahar monte galitsin"
+<br>
+<br>for m in $machines
+<br>do
+<br>ssh $m "cd /import/linuxi386/cadi/cadiserver/; nohup java CadiServer &amp;&gt; $m.logfile &amp;"
+<br>done
+<br>---------------------------------------------------------------------------------
+</code>
+
+<hr>
+Back to <a href="http://rses.anu.edu.au/cadi">CADI homepage</a><br>
+This page last updated 25/1/2006<br>
+Peter Rickwood.
+<a href="mailto:peter.rickwood@anu.edu.au">peter.rickwood@anu.edu.au</a>
+</body>
+</html>

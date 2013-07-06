@@ -1,0 +1,117 @@
+<html>
+<head>
+<title>Fortran example (simple polynomial) </title>
+</head>
+<body>
+
+<h1>Simple polynomial optimisation in Fortran</h1>
+
+<p>
+Here is the entire Fortran code for our simple example.
+We are describing a simple polynomial 
+f(x,y,z) = x^3 + y^2 + 10z, and in this case, we specify that
+we wish to find its minima within the ranges
+x=(1,2) y=(1,2) z=(1,2).
+
+<p>
+<table border=2>
+<tr><td>
+<code>
+c------------------------------------------------------------------<br>
+c	Input:<br>
+c	      path	:The directory that user files live in<br>
+c             pathlen   :The length of the character array 'path'<br>
+c------------------------------------------------------------------<br>
+        subroutine initialize(path, pathlen)<br>
+	integer pathlen<br>
+        character path(pathlen)<br>
+c       Do nothing<br>
+        write(*,*) 'initialize called'<br>
+        return<br>
+        end<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+c----------------------------------------------------------------<br>
+c	Output:
+c	      nd		:Number of dimensions in parameter space<br>
+c	      ranges(2,nd)	:Bounds on parameter space<br>
+c	      scales(nd+1)	:Ignored. Currently unused<br>
+c----------------------------------------------------------------<br>
+c<br>
+        subroutine user_init(nd,ranges,scales)<br>
+        real*4  ranges(2,*), scales(*)<br>
+        nd = 3<br>
+        ranges(1,1)=1.<br>
+        ranges(2,1)=2.<br>
+        ranges(1,2)=1.<br>
+        ranges(2,2)=2.<br>
+        ranges(1,3)=1.<br>
+        ranges(2,3)=2.<br>
+        return<br>
+        end<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+c-------------------------------------------------------------------------<br>
+c	Input: <br>
+c	      nd		:Number of dimensions in parameter space<br>
+c	      model(nd)		:input model<br>
+c	Output:<br>
+c	      mfitval		:misfit value for model <br>
+c-------------------------------------------------------------------------<br>
+c<br>
+        subroutine forward(nd,model,mfitval)<br>
+        integer nd<br>
+        real*4 model(nd)<br>
+        real*4 mfitval<br>
+<br>
+        mfitval = model(1)*model(1)*model(1)+model(2)*model(2)+10*model(3)<br>
+<br>
+        return<br>
+        end<br>
+<br>
+</code>
+</td>
+</tr>
+</table>
+
+
+<h2>Compilation</h2>
+
+<p>
+You need to produce an object file to use with the toolkit. 
+We compile with a 2 step process of
+<ol>
+<li>Compiling the objects: <code> fc -c *.f </code>
+<li>Combining the objects into a single shared object file: <code> fc -shared *.o -o myobject.so </code>
+</ol>
+which would produce the object file <code>myobject.so</code>.
+This object file is all you need to start using the toolkit.
+
+
+
+<p><i><b>NB:</b></i> If you use any non-standard libraries, you must
+link these into your object file. You would do this 
+by typing commands similar to these:
+<ol>
+<li>Compiling the objects: <code> fc -c *.f </code>
+<li>Combining the objects into a single shared object file: <code> fc -shared *.o /some/lib/nonstdlib.so /some/lib/nonstdlib2.a -o myobject.so </code>
+</ol>
+
+ 
+
+
+
+<hr>
+Back to <a href="http://rses.anu.edu.au/cadi">CADI homepage</a><br>
+This page last updated 29/4/2005<br>
+Peter Rickwood.
+<a href="mailto:peter.rickwood@anu.edu.au">peter.rickwood@anu.edu.au</a>
+</body>
+</html>

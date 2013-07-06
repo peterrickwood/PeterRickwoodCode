@@ -1,0 +1,91 @@
+<html>
+<head>
+<title>Java example (with IO)</title>
+</head>
+<body>
+
+<h1> Optimisation in Java</h1>
+
+<h2>Setup</h2>
+The following Java class is in a file called
+<b>Test.java</b> in a directory 
+called <b>JavaHandleTest</b>. This is 
+required -- see <a href="../arch/javareq.html">
+Java class requirements</a>.
+
+<p>
+Here is the complete Java code for our example:
+
+
+<table border=2>
+<tr><td>
+<p>
+<code>
+<br>
+package JavaHandleTest;<br>
+import java.io.*;<br>
+<br>
+<br>
+public class Test<br> 
+{<br>
+	private String basedir;<br>
+	private int x3,x2,x1;
+	public void initialize(String dir) throws IOException<br>
+	{<br>
+		basedir = dir;<br>
+<br>
+		//now read in polynomial coefficients from file<br>
+		File f = new File(basedir, "polycoeffs.dat");<br>
+		BufferedReader rdr = new BufferedReader(new FileReader(f));<br>
+		String line = rdr.readLine();<br>
+		x3 = Integer.parseInt(line);<br>
+		line = rdr.readLine();<br>
+		x2 = Integer.parseInt(line);<br>
+		line = rdr.readLine();<br>
+		x1 = Integer.parseInt(line);<br>
+		rdr.close();<br>
+	}<br>
+<br>
+<br>
+	public double getErrorForModel(double[] model)<br>
+	{<br>
+		return model[0]*model[0]*model[0]*x3+model[1]*model[1]*x2+model[2]*x1;<br>
+	}<br>
+<br>
+	public double[][] getBoundsOnModelSpace()<br>
+	{<br>
+		double[][] res = new double[3][];<br>
+		res[0] = new double[] {0.0, 1.0};<br>
+		res[1] = new double[] {0.0, 1.0};<br>
+		res[2] = new double[] {0.0, 1.0};<br>
+		return res;<br>
+	}<br>
+<br>
+	public int getDimensionOfModelSpace()<br>
+	{<br>
+		return 3;<br>
+	}<br>
+<br>
+}<br>
+<br>
+</code>
+</td></tr>
+</table>
+
+<h2>Compilation</h2>
+
+<p>
+Just compile normally with your java compiler. Remember that your base
+class (the one that implements the required methods) must be in
+a package with the same name as the directory in which it resides.
+Any other resources you require must also be in that directory,
+or a sub-directory of that directory.
+
+
+<hr>
+Back to <a href="http://rses.anu.edu.au/cadi">CADI homepage</a><br>
+This page last updated 16/3/2005<br>
+Peter Rickwood.
+<a href="mailto:peter.rickwood@anu.edu.au">peter.rickwood@anu.edu.au</a>
+</body>
+</html>
