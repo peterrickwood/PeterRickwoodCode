@@ -392,8 +392,8 @@ public class DataStore
 				
 				//make sure that there are as many or more category names than valid regions.
 				//and make sure that the maximum category index is less than the length of the category name 
-				if(validregions.length > membershiplayer.getCategoryNames().length || Util.getMax(validregions) >= validregions.length)
-					throw new RuntimeException("Number of distinct regions greater thah number of category names!! There are "+membershiplayer.getCategoryNames().length+" category names and "+validregions.length+" valid regions!");
+				if(validregions.length > membershiplayer.getCategoryNames().length || Util.getMax(validregions) >= validregions.length) 
+					throw new RuntimeException("Number of distinct regions greater than number of category names!! There are "+membershiplayer.getCategoryNames().length+" category names and "+validregions.length+" valid regions!");
 				
 				//found membership layer, so stop looking
 				Debug.println("Finished processing membership file.. there were "+validregions.length+" unique regions", Debug.INFO);

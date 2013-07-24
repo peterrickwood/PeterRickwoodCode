@@ -409,7 +409,7 @@ public class CreateLayers
 			
 			if(excludeRegionsWithCentroidOutsideBoundingBox)
 			{
-				Debug.println("EXCLUSING POLY OUTSIDE BOUNDING BOX", Debug.IMPORTANT);
+				Debug.println("EXCLUDING POLY OUTSIDE BOUNDING BOX", Debug.IMPORTANT);
 				if(centroid[0] > minlat && centroid[0] < maxlat &&
 				   centroid[1] > minlong && centroid[1] < maxlong)
 					newcentroids.add(polys[i]);
@@ -422,7 +422,8 @@ public class CreateLayers
 			newpolys[i] = (GoogleEarthPolygon) newcentroids.get(i);
 
 		polys = newpolys;
-		Debug.println("There are "+newpolys.length+" valid districts", Debug.IMPORTANT);
+		Debug.println("There are "+newpolys.length+" valid polygons", Debug.IMPORTANT);
+		
 				
 
 		//remember which CDs have member points
@@ -730,12 +731,31 @@ public class CreateLayers
 	
 	
 	
-	
+	public static void usage()
+	{
+		String[] usage = new String[] {
+				"Usage:",
+				"    arg0 is KML file",
+				"    arg1 is either 'bydata' or else minlat",
+				"    arg2 is ignored (if arg1 is 'bydata'), otherwise is latsize",
+				"    arg3 is ignored (if arg1 is 'bydata'), otherwise is minlong",
+				"    arg4 is ignored (if arg1 is 'bydata'), otherwise is longsize",
+				"    arg5 is the number of (longitudinal) steps to use when starting. Final layer has 10 times this resolution",
+				"    arg6, if present, is the 'name' field for each polygon in the kml file"
+		};
+		
+		for(String s: usage)
+			System.out.println(s);
+		System.exit(0);
+	}
 	
 	
 	
 	public static void main(String[] args) throws Exception
 	{
+		if(args.length != 6 && args.length != 7)
+			usage();
+		
 		Debug.setVerbosityLevel(Debug.INFO);
 		Debug.setDebugLevel(Debug.DEBUG_SUSPICIOUS);
 		Debug.println("creating layer", Debug.INFO);

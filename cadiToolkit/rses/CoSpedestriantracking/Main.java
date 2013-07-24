@@ -6,13 +6,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.sun.org.apache.bcel.internal.generic.GETSTATIC;
 
 import rses.Debug;
 import rses.math.MathUtil;
 import rses.spatial.GISLayer;
 import rses.util.FileUtil;
-import sun.reflect.ReflectionFactory.GetReflectionFactoryAction;
 
 public class Main 
 {
